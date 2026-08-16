@@ -106,8 +106,118 @@ Este diagrama de texto es la base para armar después el C4 de contexto formal (
 ```
 
 # Solution Strategy {#section-solution-strategy}
+# Proyecto XALD
+## arc42 — Sección 4: Estrategia de solución / Sección 5: Vista de bloques de construcción
+
+---
+
+## 4. Estrategia de solución
+
+Ideas principales y enfoques de solución que definen cómo XALD resuelve el problema. Las herramientas que se mencionan más adelante son solo ejemplos de cómo se podría implementar cada idea, no una decisión cerrada; se pueden cambiar según lo que mejor funcione en el momento.
+
+* **Para cumplir con las metas de calidad:** La app realiza una captura pasiva e ingesta automática leyendo mensajes o notificaciones del banco mediante receptores nativos (`BroadcastReceiver` / `SMS`) y soporte para archivos CSV. La IA actúa como un soporte extra no bloqueante: si falla o no hay red, la transacción se guarda como *“Sin Categorizar”*. Además, las transacciones conocidas se procesan rápido localmente con expresiones regulares (`Regex`) para ahorrar batería y reducir costos, reservando la IA solo para casos ambiguos.
+
+* **En cuanto al patrón de arquitectura:** Se adopta un enfoque *offline-first* donde toda la información se almacena primero en el dispositivo (mediante `SQLite`/`Room`) para garantizar disponibilidad total sin internet. La sincronización con el servidor se realiza de forma asíncrona mediante una cola local (*Sync Queue*) basada en marcas de tiempo (`timestamps`) e identificadores únicos (`UUIDs`), resolviendo conflictos en el backend mediante *Last-Write-Wins* (LWW) sin bloquear la interfaz.
+
+* **Entre las decisiones tecnológicas principales:** Se aprovechan las herramientas nativas del sistema operativo (permisos `RECEIVE_SMS` / `SmsRetriever`) ante la falta de APIs de *Open Banking* locales. Para mantener el presupuesto en **$0** y cumplir el plazo de **16 semanas**, se combina un motor local `Regex` con llamadas HTTP REST a la API de Google Gemini (vía respuestas JSON) y el uso de librerías de código abierto.
+* * **Para estrategias de seguridad:** Se aplica *Privacidad desde el Diseño*: hacia el servicio de IA solo se envían el nombre del comercio y el monto —omitiendo cédula, saldos o número de cuenta— para cumplir con la **Ley 1581 (Habeas Data)**. Asimismo, la información financiera almacenada en el dispositivo se protege con cifrado (`AES-256` / `Android KeyStore`) para salvaguardar los datos ante robo o acceso no autorizado.
+
 
 # Building Block View {#section-building-block-view}
+La vista de bloques de construcción muestra la descomposición del sistema XALD en sus componentes principales, desde una perspectiva de caja blanca (Nivel 1) hasta el detalle interno del bloque de la App Móvil (Nivel 2).
+
+### 5.1 Nivel 1 — Sistema XALD
+
+Vista de caja blanca del sistema completo: la **App Móvil Android** captura y gestiona la información financiera del usuario, mientras el **Backend XALD** la procesa y sincroniza.
+
++-----------------------------------------------------------------------+
+|                             SISTEMA XALD                              |
++------------------------------------+----------------------------------+
+| 1. App Móvil Android               | 2. Backend XALD                  |
+|  • Ingesta de Notificaciones       |  • Servidor API REST             |
+|  • Parser Local (Regex)            |  • Procesamiento de Reportes     |
+|  • Base de Datos Cifrada           |  • Motor de Sincronización LWW    |
+|  • UI / Gestión Financiera         |  • Base de Datos Remota          |
++------------------------------------+----------------------------------+
+
+
+1. **App Móvil Android:** Captura, procesa y presenta la información financiera del usuario de forma local, incluyendo la ingesta de notificaciones bancarias, el parseo con expresiones regulares, el almacenamiento cifrado y la interfaz de gestión financiera.
+2. **Backend XALD:** Expone la API REST, procesa reportes y ejecuta la sincronización de datos entre dispositivos mediante el motor *Last-Write-Wins* (LWW), manteniendo la base de datos remota como respaldo consolidado.
+
+---
+
+### 5.2 Nivel 2 — App Móvil Android
+
+Descomposición del bloque **“App Móvil Android”** en sus cuatro módulos internos y el flujo de datos entre ellos.
+
++---------------------------------------------------------------------------------------------------------------------------+
+|                                                   1. APP MÓVIL ANDROID                                                    |
++------------------------------+----------------------------------+------------------------------------+--------------------+
+| 1.1 Ingestion Module         | 1.2 Processing & Parser          | 1.3 Data & Sync Module             | 1.4 UI & Dashboard |
+| (BroadcastReceiver / SMS) -> | (Regex Engine + Gemini API Client) -> | (SQLite/Room AES-256 + Sync Queue) -> | (Presentación /    |
+|                              |                                  |                                    |  Reportes)         |
++------------------------------+----------------------------------+------------------------------------+--------------------+
+
+
+* **1.1 Ingestion Module (`BroadcastReceiver` / `SMS`):** Captura de forma pasiva los mensajes y notificaciones bancarias entrantes en el dispositivo, sin intervención del usuario.
+* **1.2 Processing & Parser Module (`Regex Engine` + `Gemini API Client`):** Interpreta el texto capturado usando expresiones regulares para los casos conocidos y, cuando el resultado es ambiguo, recurre a la API de Gemini como soporte adicional.
+* **1.3 Data & Sync Module (`SQLite`/`Room AES-256` + `Sync Queue`):** Almacena las transacciones de forma cifrada en el dispositivo y gestiona la cola de sincronización asíncrona con el backend.
+* ### Scenario 1: Captura, Parsing e Inferencia Automática de SMS (Módulo A-01)
+
+Este escenario describe el flujo desde que el celular recibe una notificación bancaria hasta que la transacción queda guardada localmente.
+
+1. *Recepción del Evento:* El Sistema Operativo Android recibe un SMS del banco y activa el BroadcastReceiver del *Ingestion Module*.
+
+
+2. *Filtrado:* El *Ingestion Module* valida el remitente y extrae el texto plano.
+
+
+3. *Parsing Local (Regex):* El *Processing & Parser Module* evalúa el texto con expresiones regulares.
+
+
+* Caso A (Regex exitoso): Si reconoce el comercio y monto, genera el objeto Transaction.
+
+
+* Caso B (Comercio ambiguo): Envía el texto a la *Gemini API* vía HTTPS con un prompt estructurado en JSON para extraer la categoría y comercio limpio.
+
+
+
+
+4. *Persistencia Local:* El objeto Transaction se envía al *Data & Sync Module*, el cual:
+* Cifra los campos con *AES-256*.
+
+
+* Guarda la fila en la DB local (SQLite).
+
+
+* Agrega el registro a la cola de sincronización (Sync Queue) con su UUID y timestamp.
+
+
+
+
+5. *Notificación a la UI:* El *UI & Dashboard* detecta el cambio en la base de datos y actualiza el saldo y reporte en pantalla.
+
+
+
+---
+
+### Scenario 2: Sincronización Asíncrona Offline-First con el Backend
+
+Este escenario describe cómo se respaldan las transacciones generadas en modo offline cuando el dispositivo recupera la conexión a internet.
+
+1. *Detección de Red:* El *Data & Sync Module* detecta que hay conexión a internet activa.
+
+
+2. *Lectura de Cola:* Lee los lotes pendientes de la tabla Sync Queue local.
+
+
+3. *Envío HTTPS:* Realiza una petición POST /api/v1/sync al *Backend XALD* enviando el lote JSON.
+
+
+4. *Resolución LWW:* El *Backend XALD* procesa los registros. Si hay un conflicto de edición entre el servidor y el cliente, aplica la regla Last-Write-Wins evaluando la marca de tiempo (timestamp).
+
+
+5. *Confirmación y Limpieza:* El *Backend XALD* responde con un código de éxito. El *Data & Sync Module* elimina los ítems sincronizados de la Sync Queue local.
 
 ## Whitebox Overall System {#_whitebox_overall_system}
 
