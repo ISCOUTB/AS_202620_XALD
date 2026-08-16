@@ -1,13 +1,13 @@
 ---
-date: AGOSTO 2026
-title: "  PROYECTO XALD  "
+## Date: AUG2026 - NOV2026 
+## Title: "  PROYECTO XALD  "
 ---
 
-# Introduction and Goals {#section-introduction-and-goals}
+# Introduction and Goals 
 
 Esta sección presenta una visión general de XALD: qué problema resuelve, cómo funciona, qué objetivos de calidad persigue y quiénes son las partes interesadas. Sirve como punto de entrada para el resto de la documentación de arquitectura.
 
-## Requirements Overview {#_requirements_overview}
+## Requirements Overview 
 
 En la gestión financiera personal actual se identifican dos limitaciones estructurales que XALD busca resolver:
 
@@ -25,7 +25,7 @@ En la gestión financiera personal actual se identifican dos limitaciones estruc
 
 **Resiliencia:** si no hay internet o la IA no responde, el gasto se guarda igual bajo "Sin Categorizar" y se reclasifica automáticamente al volver la señal — nunca se pierde un dato. Las transacciones pendientes de sincronizar viven en una Sync Queue que garantiza orden cronológico exacto (timestamps/UUIDs) al reconectar, evitando duplicados o saldos sobrescritos.
 
-## Quality Goals {#_quality_goals}
+## Quality Goals 
 
 | # | Objetivo de calidad | Descripción |
 |---|---|---|
@@ -43,12 +43,10 @@ En la gestión financiera personal actual se identifican dos limitaciones estruc
 | Ingesta CSV | Subir un archivo CSV con 100 transacciones | Se procesan y muestran en pantalla en < 2 segundos |
 
 **Restricciones clave:**
-
-- **Tiempo:** 16 semanas de semestre.
 - **Presupuesto:** $0 — solo bibliotecas open-source y capas gratuitas de APIs.
 - **Privacidad (Ley 1581 de Colombia):** a la IA solo se le envía el nombre del comercio y el monto; nunca se envían nombres de usuarios ni números de cédula/cuenta.
 
-## Stakeholders {#_stakeholders}
+## Stakeholders 
 
 | Rol | Contacto | Expectativas |
 |---|---|---|
@@ -56,22 +54,6 @@ En la gestión financiera personal actual se identifican dos limitaciones estruc
 | Equipo de desarrollo (nosotros) | Diseña, implementa y documenta cada incremento | Entregar una arquitectura clara, documentada y sostenible en un semestre |
 | Docente / Evaluador (UTB) | Revisa el repositorio de GitHub y los entregables incrementales | Verificar que la documentación (arc42) corresponda con el repositorio |
 | Servicio externo de IA (Gemini) | Se consulta vía API; no almacena datos personales del usuario | Recibir solo datos anonimizados (comercio + monto) para categorizar |
-
-## Requirements Overview {#_requirements_overview}
-
-## Quality Goals {#_quality_goals}
-
-## Stakeholders {#_stakeholders}
-
-+-------------+---------------------------+---------------------------+
-| Role/Name   | Contact                   | Expectations              |
-+=============+===========================+===========================+
-| *           | *\<Contact-1\>*           | *\<Expectation-1\>*       |
-| \<Role-1\>* |                           |                           |
-+-------------+---------------------------+---------------------------+
-| *           | *\<Contact-2\>*           | *\<Expectation-2\>*       |
-| \<Role-2\>* |                           |                           |
-+-------------+---------------------------+---------------------------+
 
 # Architecture Constraints
 
