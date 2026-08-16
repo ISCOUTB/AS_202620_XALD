@@ -21,9 +21,9 @@ title: "PROYECTO XALD"
 | \<Role-2\>* |                           |                           |
 +-------------+---------------------------+---------------------------+
 
-# Architecture Constraints {#section-architecture-constraints}
+# Architecture Constraints
 
-# Context and Scope {#section-context-and-scope}
+# Context and Scope
 
 ## Business Context {#_business_context}
 
