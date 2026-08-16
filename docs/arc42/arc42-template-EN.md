@@ -3,18 +3,6 @@ date: AGOSTO 2026
 title: "PROYECTO XALD"
 ---
 
-# 
-
-**About arc42**
-
-arc42, the template for documentation of software and system
-architecture.
-
-Template Version 9.0-EN. (based upon AsciiDoc version), July 2025
-
-Created, maintained and © by Dr. Peter Hruschka, Dr. Gernot Starke and
-contributors. See <https://arc42.org>.
-
 # Introduction and Goals {#section-introduction-and-goals}
 
 ## Requirements Overview {#_requirements_overview}
