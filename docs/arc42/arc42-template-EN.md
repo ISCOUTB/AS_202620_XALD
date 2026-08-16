@@ -4,59 +4,58 @@ title: "  PROYECTO XALD  "
 ---
 
 # Introduction and Goals {#section-introduction-and-goals}
-## Introduction and Goals {#section-introduction-and-goals}
 
-This section presents an overview of XALD: what problem it solves, how it works, what quality goals it pursues, and who the stakeholders are. It serves as the entry point for the rest of the architecture documentation.
+Esta sección presenta una visión general de XALD: qué problema resuelve, cómo funciona, qué objetivos de calidad persigue y quiénes son las partes interesadas. Sirve como punto de entrada para el resto de la documentación de arquitectura.
 
-### Requirements Overview {#_requirements_overview}
+## Requirements Overview {#_requirements_overview}
 
-Two structural limitations are identified in current personal finance management solutions that XALD aims to solve:
+En la gestión financiera personal actual se identifican dos limitaciones estructurales que XALD busca resolver:
 
-- **Data entry friction (cognitive load).** Manually logging every transaction takes time; after a few weeks the user abandons the app, causing loss of integrity in the financial history ("ant expenses" go unrecorded).
-- **Strict dependency on connectivity (network coupling).** If the user has no data or poor signal, most apps won't open or allow any registration at all.
+- **Fricción en la entrada de datos (carga cognitiva).** Anotar cada transacción a mano toma tiempo; al cabo de pocas semanas el usuario abandona la app, generando pérdida de integridad del historial financiero ("gastos hormiga" no registrados).
+- **Dependencia estricta de conectividad (acoplamiento a red).** Si el usuario no tiene datos o la señal es mala, la mayoría de apps no abren o no permiten registrar nada.
 
-**Proposed solution:** a mobile app that logs expenses with minimal user intervention, automatically reading bank SMS/notifications or CSV files exported from the bank, and that works without internet to show information instantly (offline-first).
+**Solución propuesta:** una app móvil que registra los gastos con mínima intervención del usuario, leyendo automáticamente notificaciones/SMS bancarios o archivos CSV exportados del banco, y que funciona sin internet para mostrar la información al instante (offline-first).
 
-**How the system works (data flow):** XALD works as a 4-step data pipeline:
+**Cómo funciona el sistema (flujo de datos):** XALD funciona como una tubería de datos (pipeline) de 4 pasos:
 
-1. **Capture:** via bank SMS/notification (read automatically in the background) or via a CSV file uploaded by the user.
-2. **Validation and cleaning:** date, amount, and merchant are extracted, verifying the data is valid.
-3. **Smart categorization:** the merchant name is sent to an AI API (Gemini API, free tier) which returns the expense category (e.g. "Food").
-4. **Local storage:** the categorized transaction is persisted encrypted on the device (SQLite + SQLCipher, AES-256 encryption), visible instantly even without internet.
+1. **Captura:** vía SMS/notificación bancaria (leída automáticamente en segundo plano) o vía archivo CSV subido por el usuario.
+2. **Validación y limpieza:** se extraen fecha, monto y comercio, verificando que los datos sean válidos.
+3. **Categorización inteligente:** el nombre del comercio se envía a una API de IA (Gemini API, capa gratuita) que devuelve la categoría del gasto (ej. "Alimentación").
+4. **Guardado local:** la transacción categorizada se persiste cifrada en el dispositivo (SQLite + SQLCipher, cifrado AES-256), visible al instante aunque no haya internet.
 
-**Resilience:** if there is no internet or the AI doesn't respond, the expense is saved anyway under "Uncategorized" and automatically reclassified once the signal returns — no data is ever lost. Pending transactions live in a Sync Queue that guarantees exact chronological order (timestamps/UUIDs) upon reconnection, avoiding duplicates or overwritten balances.
+**Resiliencia:** si no hay internet o la IA no responde, el gasto se guarda igual bajo "Sin Categorizar" y se reclasifica automáticamente al volver la señal — nunca se pierde un dato. Las transacciones pendientes de sincronizar viven en una Sync Queue que garantiza orden cronológico exacto (timestamps/UUIDs) al reconectar, evitando duplicados o saldos sobrescritos.
 
-### Quality Goals {#_quality_goals}
+## Quality Goals {#_quality_goals}
 
-| # | Quality Goal | Description |
+| # | Objetivo de calidad | Descripción |
 |---|---|---|
-| 1 | Availability (offline-first) | Read and write data without signal; the user never sees a network error when logging an expense. |
-| 2 | Resilience | If the AI fails or doesn't respond, the app keeps working normally ("Uncategorized" as a temporary category). |
-| 3 | Basic security | Protect the local database against unauthorized reads (SQLCipher/AES-256 encryption). |
-| 4 | Eventual consistency | Upon reconnection, the Sync Queue uploads transactions in correct chronological order without duplicating or overwriting balances. |
+| 1 | Disponibilidad (offline-first) | Leer y escribir datos sin señal; el usuario nunca ve un error de red al registrar un gasto. |
+| 2 | Resiliencia | Si la IA falla o no responde, la app sigue funcionando con normalidad (categoría "Sin Categorizar" temporal). |
+| 3 | Seguridad básica | Proteger la base de datos local contra lecturas no autorizadas (cifrado SQLCipher/AES-256). |
+| 4 | Consistencia eventual | Al reconectar, la Sync Queue sube las transacciones en orden cronológico correcto sin duplicar ni sobrescribir saldos. |
 
-**Measurable quality scenarios:**
+**Escenarios de calidad medibles:**
 
-| Scenario | Stimulus | Measurable response |
+| Escenario | Estímulo | Respuesta medible |
 |---|---|---|
-| Offline registration | Log an expense in airplane mode | Saved locally in < 150 ms, with no network error message |
-| AI failure | The categorization API is down or unresponsive | "Uncategorized" is assigned in < 200 ms; the app doesn't crash or freeze |
-| CSV ingestion | Upload a CSV file with 100 transactions | Rows are processed and displayed on screen in < 2 seconds |
+| Registro offline | Registrar un gasto en modo avión | Se guarda localmente en < 150 ms, sin mensaje de error de red |
+| Fallo de IA | La API de categorización está caída o no responde | Se asigna "Sin Categorizar" en < 200 ms; la app no se cierra ni se congela |
+| Ingesta CSV | Subir un archivo CSV con 100 transacciones | Se procesan y muestran en pantalla en < 2 segundos |
 
-**Key constraints:**
+**Restricciones clave:**
 
-- **Time:** 16-week semester.
-- **Budget:** $0 — only open-source libraries and free API tiers.
-- **Privacy (Colombian Law 1581):** only the merchant name and amount are sent to the AI; user names or ID/account numbers are never sent.
+- **Tiempo:** 16 semanas de semestre.
+- **Presupuesto:** $0 — solo bibliotecas open-source y capas gratuitas de APIs.
+- **Privacidad (Ley 1581 de Colombia):** a la IA solo se le envía el nombre del comercio y el monto; nunca se envían nombres de usuarios ni números de cédula/cuenta.
 
-### Stakeholders {#_stakeholders}
+## Stakeholders {#_stakeholders}
 
-| Role/Name | Contact | Expectations |
+| Rol | Contacto | Expectativas |
 |---|---|---|
-| End user | Interacts with the mobile app | Log and check finances with minimal friction, without depending on signal |
-| Development team (us) | Designs, implements, and documents each increment | Deliver a clear, documented, sustainable architecture within one semester |
-| Instructor / Evaluator (UTB) | Reviews the GitHub repository and incremental deliverables | Verify that the documentation (arc42) matches the repository |
-| External AI service (Gemini) | Queried via API; stores no personal user data | Receive only anonymized data (merchant + amount) for categorization |
+| Usuario final | Interactúa con la app móvil | Registrar y consultar sus finanzas con mínima fricción, sin depender de señal |
+| Equipo de desarrollo (nosotros) | Diseña, implementa y documenta cada incremento | Entregar una arquitectura clara, documentada y sostenible en un semestre |
+| Docente / Evaluador (UTB) | Revisa el repositorio de GitHub y los entregables incrementales | Verificar que la documentación (arc42) corresponda con el repositorio |
+| Servicio externo de IA (Gemini) | Se consulta vía API; no almacena datos personales del usuario | Recibir solo datos anonimizados (comercio + monto) para categorizar |
 
 ## Requirements Overview {#_requirements_overview}
 
