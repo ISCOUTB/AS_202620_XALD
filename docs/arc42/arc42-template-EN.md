@@ -29,7 +29,7 @@ title: "  PROYECTO XALD  "
 
 Estas son las condiciones que ya vienen dadas para el proyecto y que no podemos cambiar. No son decisiones de diseño que tomamos nosotros por gusto, sino cosas que limitan desde antes cómo se puede construir XALD.
 
-#Restricciones Técnicas:
+# Restricciones Técnicas:
 
 RT-01 (Exclusividad de Sistema Operativo): La app se va a desarrollar solo para Android. La razón es que leer los SMS automáticamente en segundo plano (usando BroadcastReceiver y el permiso RECEIVE_SMS) es algo que solo se puede hacer de esa forma en Android; otros sistemas móviles no dejan que una app lea mensajes de texto así por sus políticas de seguridad.
 
@@ -41,7 +41,7 @@ RT-04 (Ingesta por Inferencia / Regex): XALD depende de leer e interceptar los m
 
 RT-05 (Consistencia Sencilla LWW): Cuando hay un cruce entre lo que pasó en el celular y lo que hay en el servidor, gana la transacción más reciente (esto se conoce como Last-Write-Wins o LWW). Para saber cuál es la más reciente se usan marcas de tiempo y códigos únicos (UUIDs) dentro de la fila de espera (Sync Queue).
 
-#Restricciones Organizacionales y de Proyecto:
+# Restricciones Organizacionales y de Proyecto:
 
 RO-01 (Límite Semestral y Equipo): El desarrollo está limitado al alcance de un semestre académico y lo hace un equipo de estudiantes. Por eso el primer incremento del proyecto se enfoca solo en el módulo A-01 (recepción y procesamiento de notificaciones).
 
