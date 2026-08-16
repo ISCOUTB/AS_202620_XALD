@@ -82,12 +82,12 @@ Este diagrama de texto es la base para armar después el C4 de contexto formal (
 
 **\<Mapping Input/Output to Channels\>**
 
-| Interfaz Técnica | Canal / Protocolo | Formato de Datos | Cifrado / Seguridad |
+| Actor / Sistema externo | Descripción | Entradas hacia XALD | Salidas desde XALD |
 | --- | --- | --- | --- |
-| Sistema Operativo → App XALD | Android BroadcastReceiver (Eventos del SO) | Texto plano (SmsMessage) | Permiso Android RECEIVE_SMS |
-| App XALD → DB Local | Llamada interna SQLite / Room | Objetos Relacionales / Filas | AES-256 vía Android Keystore |
-| App XALD → Gemini API | HTTPS / Rest (POST) | JSON (responseMimeType: application/json) | TLS 1.3 + API Key |
-| App XALD → Backend XALD | HTTPS / REST (POST/PUT) | Lotes JSON (Sync Queue) | TLS 1.3 + Tokens de Sesión |
+| Usuario Final | Propietario de la información financiera | Corrección manual de categorías, registros manuales, consultas de reportes | Visualización de saldo, historial de transacciones, reportes de gasto |
+| Entidades Bancarias / SMS | Proveedores de mensajería del sistema operativo que emiten alertas de movimientos | Mensaje de texto (SMS) con monto, comercio y fecha | Visualización de saldo, historial de transacciones, reportes de gasto |
+| Backend XALD / Servidor | Sistema remoto para sincronización y reportes | Confirmación de sincronización, agregaciones de reportes | Cola de transacciones pendientes (Sync Queue) |
+| Google Gemini API | API de IA externa para la inferencia de categorías de gasto | Categoría sugerida en formato JSON | Cadena de texto limpia del comercio / origen |
 
 # Solution Strategy {#section-solution-strategy}
 
