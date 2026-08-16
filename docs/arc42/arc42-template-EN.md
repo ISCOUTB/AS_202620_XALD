@@ -80,6 +80,27 @@ Este diagrama de texto es la base para armar después el C4 de contexto formal (
 
 **\<Mapping Input/Output to Channels\>**
 
+[Banco / SMS]
+        |
+        |  SMS (monto, comercio, fecha)
+        v
+[Sistema Operativo]
+        |
+        |  evento local (BroadcastReceiver)
+        v
+[App XALD] --texto del comercio--> [Google Gemini API]
+        |  <---categoría sugerida (JSON)---
+        |
+        |  guardado local (cifrado AES-256)
+        v
+[Base de datos local]
+        |
+        |  cuando hay conexión (sync HTTPS/REST)
+        v
+[Backend XALD]
+
+[Usuario final] <-- consulta saldo, reportes, alertas -- [App XALD]
+
 # Solution Strategy {#section-solution-strategy}
 
 # Building Block View {#section-building-block-view}
