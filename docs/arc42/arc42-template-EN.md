@@ -130,22 +130,12 @@ La vista de bloques de construcción muestra la descomposición del sistema XALD
 
 Vista de caja blanca del sistema completo: la **App Móvil Android** captura y gestiona la información financiera del usuario, mientras el **Backend XALD** la procesa y sincroniza.
 
-graph TD
-    subgraph XALD["SISTEMA XALD"]
-        subgraph App["1. App Móvil Android"]
-            A1["• Ingesta de Notificaciones"]
-            A2["• Parser Local (Regex)"]
-            A3["• Base de Datos Cifrada"]
-            A4["• UI / Gestión Financiera"]
-        end
-        subgraph Backend["2. Backend XALD"]
-            B1["• Servidor API REST"]
-            B2["• Procesamiento de Reportes"]
-            B3["• Motor de Sincronización LWW"]
-            B4["• Base de Datos Remota"]
-        end
-    end
-
+| 1. App Móvil Android | 2. Backend XALD |
+| :--- | :--- |
+| • Ingesta de Notificaciones | • Servidor API REST |
+| • Parser Local (Regex) | • Procesamiento de Reportes |
+| • Base de Datos Cifrada | • Motor de Sincronización LWW |
+| • UI / Gestión Financiera | • Base de Datos Remota |
 
 1. **App Móvil Android:** Captura, procesa y presenta la información financiera del usuario de forma local, incluyendo la ingesta de notificaciones bancarias, el parseo con expresiones regulares, el almacenamiento cifrado y la interfaz de gestión financiera.
 2. **Backend XALD:** Expone la API REST, procesa reportes y ejecuta la sincronización de datos entre dispositivos mediante el motor *Last-Write-Wins* (LWW), manteniendo la base de datos remota como respaldo consolidado.
