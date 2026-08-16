@@ -106,12 +106,7 @@ Este diagrama de texto es la base para armar después el C4 de contexto formal (
 ```
 
 # Solution Strategy {#section-solution-strategy}
-# Proyecto XALD
-## arc42 — Sección 4: Estrategia de solución / Sección 5: Vista de bloques de construcción
 
----
-
-## 4. Estrategia de solución
 
 Ideas principales y enfoques de solución que definen cómo XALD resuelve el problema. Las herramientas que se mencionan más adelante son solo ejemplos de cómo se podría implementar cada idea, no una decisión cerrada; se pueden cambiar según lo que mejor funcione en el momento.
 
@@ -120,6 +115,7 @@ Ideas principales y enfoques de solución que definen cómo XALD resuelve el pro
 * **En cuanto al patrón de arquitectura:** Se adopta un enfoque *offline-first* donde toda la información se almacena primero en el dispositivo (mediante `SQLite`/`Room`) para garantizar disponibilidad total sin internet. La sincronización con el servidor se realiza de forma asíncrona mediante una cola local (*Sync Queue*) basada en marcas de tiempo (`timestamps`) e identificadores únicos (`UUIDs`), resolviendo conflictos en el backend mediante *Last-Write-Wins* (LWW) sin bloquear la interfaz.
 
 * **Entre las decisiones tecnológicas principales:** Se aprovechan las herramientas nativas del sistema operativo (permisos `RECEIVE_SMS` / `SmsRetriever`) ante la falta de APIs de *Open Banking* locales. Para mantener el presupuesto en **$0** y cumplir el plazo de **16 semanas**, se combina un motor local `Regex` con llamadas HTTP REST a la API de Google Gemini (vía respuestas JSON) y el uso de librerías de código abierto.
+  
 * * **Para estrategias de seguridad:** Se aplica *Privacidad desde el Diseño*: hacia el servicio de IA solo se envían el nombre del comercio y el monto —omitiendo cédula, saldos o número de cuenta— para cumplir con la **Ley 1581 (Habeas Data)**. Asimismo, la información financiera almacenada en el dispositivo se protege con cifrado (`AES-256` / `Android KeyStore`) para salvaguardar los datos ante robo o acceso no autorizado.
 
 
@@ -130,6 +126,12 @@ La vista de bloques de construcción muestra la descomposición del sistema XALD
 
 Vista de caja blanca del sistema completo: la **App Móvil Android** captura y gestiona la información financiera del usuario, mientras el **Backend XALD** la procesa y sincroniza.
 
+| Bloque | Responsabilidad |
+| :--- | :--- |
+| App Móvil | Es lo que ve y usa el usuario; ahí pasa todo el proceso de capturar, guardar y mostrar la información. |
+| Backend | Hace de puente entre la app y el servicio de IA. |
+| Servicio externo de IA | Clasifica el nombre del negocio en una categoría de gasto. |
+
 | 1. App Móvil Android | 2. Backend XALD |
 | :--- | :--- |
 | • Ingesta de Notificaciones | • Servidor API REST |
@@ -138,6 +140,7 @@ Vista de caja blanca del sistema completo: la **App Móvil Android** captura y g
 | • UI / Gestión Financiera | • Base de Datos Remota |
 
 1. **App Móvil Android:** Captura, procesa y presenta la información financiera del usuario de forma local, incluyendo la ingesta de notificaciones bancarias, el parseo con expresiones regulares, el almacenamiento cifrado y la interfaz de gestión financiera.
+   
 2. **Backend XALD:** Expone la API REST, procesa reportes y ejecuta la sincronización de datos entre dispositivos mediante el motor *Last-Write-Wins* (LWW), manteniendo la base de datos remota como respaldo consolidado.
 
 ---
@@ -157,7 +160,9 @@ Descomposición del bloque **“App Móvil Android”** en sus cuatro módulos i
 | **1.4 UI & Dashboard** | Presentación / Reportes |
 
 * **1.1 Ingestion Module (`BroadcastReceiver` / `SMS`):** Captura de forma pasiva los mensajes y notificaciones bancarias entrantes en el dispositivo, sin intervención del usuario.
+  
 * **1.2 Processing & Parser Module (`Regex Engine` + `Gemini API Client`):** Interpreta el texto capturado usando expresiones regulares para los casos conocidos y, cuando el resultado es ambiguo, recurre a la API de Gemini como soporte adicional.
+  
 * **1.3 Data & Sync Module (`SQLite`/`Room AES-256` + `Sync Queue`):** Almacena las transacciones de forma cifrada en el dispositivo y gestiona la cola de sincronización asíncrona con el backend.
 * ### Scenario 1: Captura, Parsing e Inferencia Automática de SMS (Módulo A-01)
 
