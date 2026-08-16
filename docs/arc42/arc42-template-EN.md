@@ -122,15 +122,16 @@ Ideas principales y enfoques de solución que definen cómo XALD resuelve el pro
 # Building Block View {#section-building-block-view}
 La vista de bloques de construcción muestra la descomposición del sistema XALD en sus componentes principales, desde una perspectiva de caja blanca (Nivel 1) hasta el detalle interno del bloque de la App Móvil (Nivel 2).
 
-### 5.1 Nivel 1 — Sistema XALD
-
-Vista de caja blanca del sistema completo: la **App Móvil Android** captura y gestiona la información financiera del usuario, mientras el **Backend XALD** la procesa y sincroniza.
-
 | Bloque | Responsabilidad |
 | :--- | :--- |
 | App Móvil | Es lo que ve y usa el usuario; ahí pasa todo el proceso de capturar, guardar y mostrar la información. |
 | Backend | Hace de puente entre la app y el servicio de IA. |
 | Servicio externo de IA | Clasifica el nombre del negocio en una categoría de gasto. |
+
+### 5.1 Nivel 1 — Sistema XALD
+
+Vista de caja blanca del sistema completo: la **App Móvil Android** captura y gestiona la información financiera del usuario, mientras el **Backend XALD** la procesa y sincroniza.
+
 
 | 1. App Móvil Android | 2. Backend XALD |
 | :--- | :--- |
