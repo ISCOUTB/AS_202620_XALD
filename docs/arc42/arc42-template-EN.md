@@ -1,6 +1,6 @@
 ---
 date: AGOSTO 2026
-title: "PROYECTO XALD"
+title: "  PROYECTO XALD  "
 ---
 
 # Introduction and Goals {#section-introduction-and-goals}
