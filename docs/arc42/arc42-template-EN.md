@@ -45,17 +45,38 @@ Estas son las condiciones que ya vienen dadas para el proyecto y que no podemos 
 
 # Context and Scope
 
-## Business Context {#_business_context}
+## Business Context 
+
+Aquí se muestra quién o qué interactúa con XALD desde afuera, sin entrar en detalles técnicos de cómo se comunican. Ahora el sistema también incluye la API de Gemini de Google, que ayuda a sugerir en qué categoría va cada gasto.
 
 **\<Diagram or Table\>**
+
+Actor / Sistema externo	Descripción	Entradas hacia XALD	Salidas desde XALD
+Usuario Final	Propietario de la información financiera	Corrección manual de categorías, registros manuales, consultas de reportes	Visualización de saldo, historial de transacciones, reportes de gasto
+Entidades Bancarias / SMS	Proveedores de mensajería del sistema operativo que emiten alertas de movimientos	Mensaje de texto (SMS) con monto, comercio y fecha	Visualización de saldo, historial de transacciones, reportes de gasto
+Backend XALD / Servidor	Sistema remoto para sincronización y reportes	Confirmación de sincronización, agregaciones de reportes	Cola de transacciones pendientes (Sync Queue)
+Google Gemini API	API de IA externa para la inferencia de categorías de gasto	Categoría sugerida en formato JSON	Cadena de texto limpia del comercio / origen
+
 
 **\<optionally: Explanation of external domain interfaces\>**
 
+La idea central es que el usuario casi no tiene que hacer nada manualmente: el sistema capta la información sola desde los SMS bancarios, usa la IA de Gemini para sugerir la categoría del gasto, y el usuario solo interviene para revisar, corregir o consultar.
+
 ## Technical Context {#_technical_context}
+
+Acá se muestra por dónde entra y sale la información, y cómo viaja de un lado a otro.
 
 **\<Diagram or Table\>**
 
+Interfaz Técnica	Canal / Protocolo	Formato de Datos	Cifrado / Seguridad
+Sistema Operativo → App XALD	Android BroadcastReceiver (Eventos del SO)	Texto plano (SmsMessage)	Permiso Android RECEIVE_SMS
+App XALD → DB Local	Llamada interna SQLite / Room	Objetos Relacionales / Filas	AES-256 vía Android Keystore
+App XALD → Gemini API	HTTPS / Rest (POST)	JSON (responseMimeType: application/json)	TLS 1.3 + API Key
+App XALD → Backend XALD	HTTPS / REST (POST/PUT)	Lotes JSON (Sync Qu
+
 **\<optionally: Explanation of technical interfaces\>**
+
+Este diagrama de texto es la base para armar después el C4 de contexto formal (con las cajas y flechas gráficas), pero ya deja claro quiénes son los actores y por dónde entra y sale la información.
 
 **\<Mapping Input/Output to Channels\>**
 
