@@ -82,12 +82,28 @@ Este diagrama de texto es la base para armar después el C4 de contexto formal (
 
 **\<Mapping Input/Output to Channels\>**
 
-| Actor / Sistema externo | Descripción | Entradas hacia XALD | Salidas desde XALD |
-| --- | --- | --- | --- |
-| Usuario Final | Propietario de la información financiera | Corrección manual de categorías, registros manuales, consultas de reportes | Visualización de saldo, historial de transacciones, reportes de gasto |
-| Entidades Bancarias / SMS | Proveedores de mensajería del sistema operativo que emiten alertas de movimientos | Mensaje de texto (SMS) con monto, comercio y fecha | Visualización de saldo, historial de transacciones, reportes de gasto |
-| Backend XALD / Servidor | Sistema remoto para sincronización y reportes | Confirmación de sincronización, agregaciones de reportes | Cola de transacciones pendientes (Sync Queue) |
-| Google Gemini API | API de IA externa para la inferencia de categorías de gasto | Categoría sugerida en formato JSON | Cadena de texto limpia del comercio / origen |
+```
+[Banco / SMS]
+        |
+        |  SMS (monto, comercio, fecha)
+        v
+[Sistema Operativo]
+        |
+        |  evento local (BroadcastReceiver)
+        v
+[App XALD] --texto del comercio--> [Google Gemini API]
+        |  <---categoría sugerida (JSON)---
+        |
+        |  guardado local (cifrado AES-256)
+        v
+[Base de datos local]
+        |
+        |  cuando hay conexión (sync HTTPS/REST)
+        v
+[Backend XALD]
+
+[Usuario final] <-- consulta saldo, reportes, alertas -- [App XALD]
+```
 
 # Solution Strategy {#section-solution-strategy}
 
