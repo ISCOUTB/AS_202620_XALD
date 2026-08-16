@@ -23,7 +23,8 @@ title: "  PROYECTO XALD  "
 
 # Architecture Constraints
 Arquitectura de Software — Proyecto XALD
-Sección 2: Restricciones de Arquitectura
+Sección 2: 
+Restricciones de Arquitectura
 
 Estas son las condiciones que ya vienen dadas para el proyecto y que no podemos cambiar. No son decisiones de diseño que tomamos nosotros por gusto, sino cosas que limitan desde antes cómo se puede construir XALD.
 
