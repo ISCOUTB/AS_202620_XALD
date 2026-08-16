@@ -146,14 +146,15 @@ Vista de caja blanca del sistema completo: la **App Móvil Android** captura y g
 
 Descomposición del bloque **“App Móvil Android”** en sus cuatro módulos internos y el flujo de datos entre ellos.
 
-+---------------------------------------------------------------------------------------------------------------------------+
-|                                                   1. APP MÓVIL ANDROID                                                    |
-+------------------------------+----------------------------------+------------------------------------+--------------------+
-| 1.1 Ingestion Module         | 1.2 Processing & Parser          | 1.3 Data & Sync Module             | 1.4 UI & Dashboard |
-| (BroadcastReceiver / SMS) -> | (Regex Engine + Gemini API Client) -> | (SQLite/Room AES-256 + Sync Queue) -> | (Presentación /    |
-|                              |                                  |                                    |  Reportes)         |
-+------------------------------+----------------------------------+------------------------------------+--------------------+
-
+| Módulo | Función / Componente Interno |
+| :--- | :--- |
+| **1.1 Ingestion Module** | `BroadcastReceiver` / `SMS` |
+| ⬇️ | |
+| **1.2 Processing & Parser** | `Regex Engine` + `Gemini API Client` |
+| ⬇️ | |
+| **1.3 Data & Sync Module** | `SQLite`/`Room AES-256` + `Sync Queue` |
+| ⬇️ | |
+| **1.4 UI & Dashboard** | Presentación / Reportes |
 
 * **1.1 Ingestion Module (`BroadcastReceiver` / `SMS`):** Captura de forma pasiva los mensajes y notificaciones bancarias entrantes en el dispositivo, sin intervención del usuario.
 * **1.2 Processing & Parser Module (`Regex Engine` + `Gemini API Client`):** Interpreta el texto capturado usando expresiones regulares para los casos conocidos y, cuando el resultado es ambiguo, recurre a la API de Gemini como soporte adicional.
