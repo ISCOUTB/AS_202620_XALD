@@ -1,6 +1,6 @@
 ---
-date: July 2025
-title: "![arc42](images/arc42-logo.png) Template"
+date: AGOSTO 2026
+title: "PROYECTO XALD"
 ---
 
 # 
