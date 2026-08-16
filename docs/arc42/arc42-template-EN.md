@@ -158,7 +158,7 @@ Descomposición del bloque **“App Móvil Android”** en sus cuatro módulos i
 * **1.2 Processing & Parser Module (`Regex Engine` + `Gemini API Client`):** Interpreta el texto capturado usando expresiones regulares para los casos conocidos y, cuando el resultado es ambiguo, recurre a la API de Gemini como soporte adicional.
   
 * **1.3 Data & Sync Module (`SQLite`/`Room AES-256` + `Sync Queue`):** Almacena las transacciones de forma cifrada en el dispositivo y gestiona la cola de sincronización asíncrona con el backend.
-* ### Scenario 1: Captura, Parsing e Inferencia Automática de SMS (Módulo A-01)
+* ### Escenario 1: Captura, Parsing e Inferencia Automática de SMS (Módulo A-01)
 
 Este escenario describe el flujo desde que el celular recibe una notificación bancaria hasta que la transacción queda guardada localmente.
 
@@ -197,7 +197,7 @@ Este escenario describe el flujo desde que el celular recibe una notificación b
 
 ---
 
-### Scenario 2: Sincronización Asíncrona Offline-First con el Backend
+### Escenario 2: Sincronización Asíncrona Offline-First con el Backend
 
 Este escenario describe cómo se respaldan las transacciones generadas en modo offline cuando el dispositivo recupera la conexión a internet.
 
