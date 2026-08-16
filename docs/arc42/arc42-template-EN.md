@@ -4,6 +4,59 @@ title: "  PROYECTO XALD  "
 ---
 
 # Introduction and Goals {#section-introduction-and-goals}
+## Introduction and Goals {#section-introduction-and-goals}
+
+This section presents an overview of XALD: what problem it solves, how it works, what quality goals it pursues, and who the stakeholders are. It serves as the entry point for the rest of the architecture documentation.
+
+### Requirements Overview {#_requirements_overview}
+
+Two structural limitations are identified in current personal finance management solutions that XALD aims to solve:
+
+- **Data entry friction (cognitive load).** Manually logging every transaction takes time; after a few weeks the user abandons the app, causing loss of integrity in the financial history ("ant expenses" go unrecorded).
+- **Strict dependency on connectivity (network coupling).** If the user has no data or poor signal, most apps won't open or allow any registration at all.
+
+**Proposed solution:** a mobile app that logs expenses with minimal user intervention, automatically reading bank SMS/notifications or CSV files exported from the bank, and that works without internet to show information instantly (offline-first).
+
+**How the system works (data flow):** XALD works as a 4-step data pipeline:
+
+1. **Capture:** via bank SMS/notification (read automatically in the background) or via a CSV file uploaded by the user.
+2. **Validation and cleaning:** date, amount, and merchant are extracted, verifying the data is valid.
+3. **Smart categorization:** the merchant name is sent to an AI API (Gemini API, free tier) which returns the expense category (e.g. "Food").
+4. **Local storage:** the categorized transaction is persisted encrypted on the device (SQLite + SQLCipher, AES-256 encryption), visible instantly even without internet.
+
+**Resilience:** if there is no internet or the AI doesn't respond, the expense is saved anyway under "Uncategorized" and automatically reclassified once the signal returns — no data is ever lost. Pending transactions live in a Sync Queue that guarantees exact chronological order (timestamps/UUIDs) upon reconnection, avoiding duplicates or overwritten balances.
+
+### Quality Goals {#_quality_goals}
+
+| # | Quality Goal | Description |
+|---|---|---|
+| 1 | Availability (offline-first) | Read and write data without signal; the user never sees a network error when logging an expense. |
+| 2 | Resilience | If the AI fails or doesn't respond, the app keeps working normally ("Uncategorized" as a temporary category). |
+| 3 | Basic security | Protect the local database against unauthorized reads (SQLCipher/AES-256 encryption). |
+| 4 | Eventual consistency | Upon reconnection, the Sync Queue uploads transactions in correct chronological order without duplicating or overwriting balances. |
+
+**Measurable quality scenarios:**
+
+| Scenario | Stimulus | Measurable response |
+|---|---|---|
+| Offline registration | Log an expense in airplane mode | Saved locally in < 150 ms, with no network error message |
+| AI failure | The categorization API is down or unresponsive | "Uncategorized" is assigned in < 200 ms; the app doesn't crash or freeze |
+| CSV ingestion | Upload a CSV file with 100 transactions | Rows are processed and displayed on screen in < 2 seconds |
+
+**Key constraints:**
+
+- **Time:** 16-week semester.
+- **Budget:** $0 — only open-source libraries and free API tiers.
+- **Privacy (Colombian Law 1581):** only the merchant name and amount are sent to the AI; user names or ID/account numbers are never sent.
+
+### Stakeholders {#_stakeholders}
+
+| Role/Name | Contact | Expectations |
+|---|---|---|
+| End user | Interacts with the mobile app | Log and check finances with minimal friction, without depending on signal |
+| Development team (us) | Designs, implements, and documents each increment | Deliver a clear, documented, sustainable architecture within one semester |
+| Instructor / Evaluator (UTB) | Reviews the GitHub repository and incremental deliverables | Verify that the documentation (arc42) matches the repository |
+| External AI service (Gemini) | Queried via API; stores no personal user data | Receive only anonymized data (merchant + amount) for categorization |
 
 ## Requirements Overview {#_requirements_overview}
 
