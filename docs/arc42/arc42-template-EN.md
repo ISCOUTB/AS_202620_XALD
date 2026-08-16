@@ -123,6 +123,26 @@ La vista de bloques de construcción muestra la descomposición del sistema XALD
 
 ### 5.1 Nivel 1 — Sistema XALD
 
+### App Móvil Android
+Responsabilidad: Captura pasiva de eventos (SMS/notificaciones), parsing local, llamada a la IA para inferencia, persistencia cifrada y presentación al usuario.
+Interfaces clave: BroadcastReceiver/OS, cliente HTTPS hacia Gemini, acceso local a SQLite/Room, API local de UI.
+Calidad crítica: privacidad (cifrado local), disponibilidad offline, latencia de IU.
+
+### Backend XALD
+Responsabilidad: Recepción/almacenamiento central, API de sincronización (Sync Queue), resolución LWW, agregación de reportes y gestión mínima de usuarios/dispositivos.
+Interfaces clave: REST API /api/v1/sync, autenticación/token, almacenamiento remoto.
+Calidad crítica: consistencia eventual, tolerancia a desconexiones y escalado mínimo.
+
+### Servicio externo de IA (Google Gemini)
+Responsabilidad: Recibir texto estructurado y devolver categoría sugerida + metadata (confidence, comercio limpio).
+Interfaces clave: HTTPS REST con JSON, manejo de claves/API key.
+Calidad crítica: precisión de clasificación, latencia y limitaciones de cuota; además minimización de datos enviados por privacidad.
+
+### Base de datos local (DB cifrada / Sync Queue)
+Responsabilidad: Almacenamiento cifrado de transacciones, estado de sincronización y cola de lotes pendientes.
+Interfaces clave: API de acceso local (Room), componentes de sincronización.
+Calidad crítica: seguridad (AES-256 + Keystore), integridad y rendimiento en dispositivos.
+
 Vista de caja blanca del sistema completo: la **App Móvil Android** captura y gestiona la información financiera del usuario, mientras el **Backend XALD** la procesa y sincroniza.
 
 
