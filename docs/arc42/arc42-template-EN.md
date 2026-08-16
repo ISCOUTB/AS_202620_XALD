@@ -81,7 +81,7 @@ Acá se muestra por dónde entra y sale la información, y cómo viaja de un lad
 Este diagrama de texto es la base para armar después el C4 de contexto formal (con las cajas y flechas gráficas), pero ya deja claro quiénes son los actores y por dónde entra y sale la información.
 
 **\<Mapping Input/Output to Channels\>**
-
+```
 [Banco / SMS]
         |
         |  SMS (monto, comercio, fecha)
@@ -102,6 +102,7 @@ Este diagrama de texto es la base para armar después el C4 de contexto formal (
 [Backend XALD]
 
 [Usuario final] <-- consulta saldo, reportes, alertas -- [App XALD]
+```
 
 # Solution Strategy {#section-solution-strategy}
 
