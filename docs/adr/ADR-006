@@ -1,0 +1,48 @@
+# ADR-0006: Selección de Estilo Arquitectónico - Monolito Modular
+
+* *Estatus:* Decidido
+* *Fecha:* Agosto 2026
+* *Proyecto:* XALDAPP — Aplicación de gestión financiera
+
+## Contexto y Problema
+El desarrollo de la aplicación XALDAPP requiere definir un estilo arquitectónico base que responda a los siguientes principios:
+
+* Organización clara del trabajo en equipo mediante fronteras de desarrollo definidas.
+* Aislamiento de servicios externos y componentes cambiantes del núcleo de la aplicación.
+* Soporte para funcionamiento Offline-First.
+* Capacidad de ejecutar pruebas unitarias sobre el JDK/JVM local sin dependencia del entorno de ejecución de Android.
+
+## Opciones Evaluadas
+* *Arquitectura por Capas (Layered):* Organización por niveles horizontales (presentación, dominio y datos).
+* *Arquitectura Hexagonal (Ports & Adapters):* Dominio aislado rodeado de puertos y adaptadores externos.
+* *Monolito Modular (Adoptado):* Módulos verticales por funcionalidad integrados en un único despliegue y comunicados por contratos.
+* Referencia: El análisis comparativo de estas opciones se encuentra documentado en la Matriz Comparativa de Estilos Arquitectónicos.
+
+## Decisión Tomada
+Se adopta el *Monolito Modular* organizado por paquetes de dominio (com.proyecto.xald.<modulo>).
+
+### Esqueleto de Paquetes Base:
+text
+com.proyecto.xald/
+├── parser/          # Ingesta y lectura de transacciones
+├── corefinanciero/  # Lógica financiera y reglas de negocio
+├── syncqueue/       # Persistencia local y sincronización
+└── aigemini/        # Integración con servicios de IA
+
+
+## Justificación Técnica
+* *Aislamiento por Contratos:* Los módulos interactúan a través de interfaces explícitas. Los componentes externos permanecen desacoplados del núcleo del sistema, evitando que cambios de proveedores o fallos de red afecten el flujo principal.
+* *Autonomía Modular:* La persistencia local y la lógica de negocio residen en módulos independientes, garantizando la operación sin conexión.
+* *Verificación en JDK Local:* El desacoplamiento entre el dominio y el framework de la plataforma permite ejecutar la suite de pruebas unitarias (gradlew test) de forma rápida directamente sobre el JDK local.
+* *Baja Complejidad de Montaje:* Mantiene la sencillez de compilación de un proyecto único sin el sobrecosto de gestionar múltiples subproyectos de Gradle.
+
+## Consecuencias
+
+### Positivas:
+* Delimitación clara de responsabilidades entre módulos.
+* Facilidad para el reparto de trabajo y desarrollo en paralelo.
+* Pruebas unitarias ágiles y desacopladas de la plataforma.
+
+### Riesgos y Mitigación:
+* *Riesgo:* Acoplamiento indeseado por importación directa de clases entre paquetes.
+* *Mitigación:* Restricción de acceso mediante el uso del modificador de visibilidad internal en Kotlin para los componentes que no formen parte de la interfaz pública del módulo.
