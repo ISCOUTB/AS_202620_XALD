@@ -1,1 +1,21 @@
+# Matriz comparativa de estilos arquitectónicos
 
+**Estilo adoptado: Monolito Modular.** Esta matriz documenta las tres alternativas evaluadas para la decisión del ADR 0001.
+
+| Criterio | Capas (Layered) | Hexagonal (Ports & Adapters) | Monolito Modular (adoptado) |
+|---|---|---|---|
+| **Cómo funciona** | Niveles horizontales apilados: presentación, dominio y datos. Cada capa solo llama a la inmediatamente inferior. | Un núcleo de dominio aislado, rodeado de interfaces (puertos) que el exterior implementa mediante adaptadores. | Un solo despliegue dividido en módulos verticales por funcionalidad, comunicados entre sí mediante contratos explícitos. |
+| **Ventajas** | Estructura simple y conocida por el equipo. Coincide con la organización que Android propone por defecto, por lo que el montaje es inmediato. | Aísla el dominio de la plataforma y de los servicios externos. Permite probar la lógica sin levantar Android ni base de datos. | Cada integrante es dueño de un módulo completo sin interferir con los demás. Las fronteras entre funcionalidades quedan explícitas y el reparto de trabajo es directo. |
+| **Desventajas** | El aislamiento depende de la disciplina del equipo: basta que alguien invoque un servicio externo desde el dominio para romperlo. Las capas tienden a filtrarse. | Complejidad desproporcionada para el alcance del proyecto. Exige construir toda una estructura de puertos y adaptadores antes de escribir lógica, y multiplica los archivos sin que el sistema lo necesite. Alto riesgo de sobre-abstracción. | Requiere definir las fronteras entre módulos antes de escribir código, y corregirlas después tiene costo. Exige acordar los contratos de comunicación desde el inicio. |
+| **Relación esfuerzo / beneficio para XALD** | Favorable. Bajo esfuerzo, aunque el beneficio estructural es limitado. | Desfavorable. El esfuerzo de montaje no se corresponde con el tamaño ni la complejidad del sistema; la separación que aporta se obtiene con menos costo por otras vías. | Favorable. El esfuerzo se concentra en definir fronteras, que es una tarea que el equipo debe hacer de todos modos para repartir el trabajo. |
+| **Integración de la API de Gemini** | Se ubica en la capa de infraestructura. Que el dominio no la invoque directamente depende de la disciplina del equipo. | Es un adaptador sobre un puerto de categorización. Aislamiento estructural, a costa de la complejidad ya señalada. | Es un módulo independiente que expone un contrato, por lo que un fallo del servicio no interrumpe el registro de la transacción. |
+| **Soporte a Offline-First** | El almacenamiento local queda en la capa de datos. Se cumple, pero no está garantizado por la estructura. | El dominio no distingue el origen del dato; local y remoto son adaptadores del mismo puerto. | El módulo de persistencia local es autónomo y no depende del módulo de sincronización, por lo que la aplicación opera sin conexión por construcción. |
+| **Captura de SMS y lectura por banco** | El receptor vive en la capa de datos. La variación por entidad se resuelve con el patrón Strategy. | Adaptador de entrada sobre un puerto de fuente de transacciones; cada banco es un adaptador más. | Módulo de captura con frontera propia. Cada banco se resuelve dentro con Strategy. |
+
+## Justificación de la decisión
+
+El monolito modular se adopta porque el sistema requiere fronteras explícitas entre funcionalidades —captura, seguridad, categorización, sincronización y presentación— que permitan repartir el trabajo entre los integrantes sin interferencias. Esa separación normalmente conduce hacia una arquitectura distribuida, pero para el tamaño de este sistema la complejidad operativa de los microservicios no se justifica. El monolito modular ofrece esas fronteras dentro de un único despliegue.
+
+Frente a **hexagonal**: aísla el dominio de forma efectiva, pero a un costo estructural desproporcionado para el alcance del proyecto.
+
+Frente a **capas**: es más simple de montar, pero divide el sistema por tipo de código y no por funcionalidad, lo que no favorece el reparto del trabajo dentro del equipo.
