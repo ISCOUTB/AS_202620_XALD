@@ -2,6 +2,7 @@
 PROYECTO XALD, APP FINANZAS PERSONALES
 
 ## Esqueleto de Ejecución
+ dir:: XALDAPP/app/src/main/java/com/proyecto/xald/
 # Comandos de Ejecución y Verificación
 
 ## 1. Desde la carpeta del proyecto (`XALDAPP/`)
