@@ -12,7 +12,7 @@ $env:ANDROID_HOME="C:\Users\(usuario)\AppData\Local\Android\Sdk"; $env:JAVA_HOME
 ```
 **Android Studio: fuera del directorio**
 ```as
-$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"; $env:ANDROID_HOME="C:\Users\OSCARDILAN\AppData\Local\Android\Sdk"; .\XALDAPP\gradlew.bat -p XALDAPP test
+$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"; $env:ANDROID_HOME="C:\Users\(us)\AppData\Local\Android\Sdk"; .\XALDAPP\gradlew.bat -p XALDAPP test
 ```
 
 ## 2. Desde la raíz del repositorio apuntando al subproyecto
