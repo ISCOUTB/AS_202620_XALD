@@ -12,10 +12,4 @@
 | **Soporte a Offline-First** | El almacenamiento local queda en la capa de datos. Se cumple, pero no está garantizado por la estructura. | El dominio no distingue el origen del dato; local y remoto son adaptadores del mismo puerto. | El módulo de persistencia local es autónomo y no depende del módulo de sincronización, por lo que la aplicación opera sin conexión por construcción. |
 | **Captura de SMS y lectura por banco** | El receptor vive en la capa de datos. La variación por entidad se resuelve con el patrón Strategy. | Adaptador de entrada sobre un puerto de fuente de transacciones; cada banco es un adaptador más. | Módulo de captura con frontera propia. Cada banco se resuelve dentro con Strategy. |
 
-## Justificación de la decisión
 
-El monolito modular se adopta porque el sistema requiere fronteras explícitas entre funcionalidades —captura, seguridad, categorización, sincronización y presentación— que permitan repartir el trabajo entre los integrantes sin interferencias. Esa separación normalmente conduce hacia una arquitectura distribuida, pero para el tamaño de este sistema la complejidad operativa de los microservicios no se justifica. El monolito modular ofrece esas fronteras dentro de un único despliegue.
-
-Frente a **hexagonal**: aísla el dominio de forma efectiva, pero a un costo estructural desproporcionado para el alcance del proyecto.
-
-Frente a **capas**: es más simple de montar, pero divide el sistema por tipo de código y no por funcionalidad, lo que no favorece el reparto del trabajo dentro del equipo.
