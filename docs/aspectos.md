@@ -7,4 +7,3 @@
 | **A-03**  | Sincronización asíncrona y gestión de conflictos | | | 001 | | | |
 | **A-04**  | Seguridad y protección de datos en reposo y tránsito | | | 004 | | | |
 
-```[cite: 1]
