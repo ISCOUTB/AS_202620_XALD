@@ -16,7 +16,7 @@ El desarrollo de la aplicación XALDAPP requiere definir un estilo arquitectóni
 * *Arquitectura por Capas (Layered):* Organización por niveles horizontales (presentación, dominio y datos).
 * *Arquitectura Hexagonal (Ports & Adapters):* Dominio aislado rodeado de puertos y adaptadores externos.
 * *Monolito Modular (Adoptado):* Módulos verticales por funcionalidad integrados en un único despliegue y comunicados por contratos.
-* Referencia: El análisis comparativo de estas opciones se encuentra documentado en la Matriz Comparativa de Estilos Arquitectónicos.
+###### * Referencia: El análisis comparativo de estas opciones se encuentra documentado en la Matriz Comparativa de Estilos Arquitectónicos.
 
 ## Decisión Tomada
 Se adopta el *Monolito Modular* organizado por paquetes de dominio (com.proyecto.xald.<modulo>).
