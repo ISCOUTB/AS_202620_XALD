@@ -95,16 +95,16 @@ La idea central es que el usuario casi no tiene que hacer nada manualmente: el s
 
 ## Technical Context
 
-Acá se muestra por dónde entra y sale la información, y cómo viaja de un lado a otro.
+Acá se muestra por dónde entra y sale la información, y cómo viaja de un lado a otro. Se agregó una columna de **Alcance** para dejar explícito cuáles interfaces cruzan la frontera del sistema (Externo, y por tanto sí aparecen en el C4 de Contexto) y cuáles ocurren dentro de XALD entre sus propios contenedores (Interno, documentadas a nivel de Contenedores/C2).
 
-| Interfaz Técnica | Canal / Protocolo | Formato de Datos | Cifrado / Seguridad |
-| --- | --- | --- | --- |
-| Sistema Operativo → App XALD | Android BroadcastReceiver (Eventos del SO) | Texto plano (SmsMessage) | Permiso Android RECEIVE_SMS |
-| App XALD → DB Local | Llamada interna SQLite / Room | Objetos Relacionales / Filas | AES-256 vía Android Keystore |
-| App XALD → Gemini API | HTTPS / Rest (POST) | JSON (responseMimeType: application/json) | TLS 1.3 + API Key |
-| App XALD → Backend XALD | HTTPS / REST (POST/PUT) | Lotes JSON (Sync Queue) | TLS 1.3 + Tokens de Sesión |
+| Interfaz Técnica | Alcance | Canal / Protocolo | Formato de Datos | Cifrado / Seguridad |
+| --- | --- | --- | --- | --- |
+| Sistema Operativo → App XALD | Externo | Android BroadcastReceiver (Eventos del SO) | Texto plano (SmsMessage) | Permiso Android RECEIVE_SMS |
+| App XALD → Gemini API | Externo | HTTPS / Rest (POST) | JSON (responseMimeType: application/json) | TLS 1.3 + API Key |
+| App XALD → DB Local | Interno | Llamada interna SQLite / Room | Objetos Relacionales / Filas | AES-256 vía Android Keystore |
+| App XALD → Backend XALD | Interno | HTTPS / REST (POST/PUT) | Lotes JSON (Sync Queue) | TLS 1.3 + Tokens de Sesión |
 
-Este diagrama de texto es la base para armar después el C4 de contexto formal (con las cajas y flechas gráficas), pero ya deja claro quiénes son los actores y por dónde entra y sale la información.
+Este diagrama de texto es la base para el C4 de contexto formal (con las cajas y flechas gráficas): las interfaces marcadas como **Externo** son las que efectivamente aparecen como conectores en el diagrama C1, mientras que las marcadas como **Interno** quedan dentro de la frontera del sistema XALD.
 
 **INPUT/OUTPUT MAP**
 
@@ -122,11 +122,8 @@ Este diagrama de texto es la base para armar después el C4 de contexto formal (
         |
         |  guardado local (cifrado AES-256)
         v
-[Base de datos local]
-        |
-        |  cuando hay conexión (sync HTTPS/REST)
-        v
-[Backend XALD]
+[Base de datos local] ------ (interno a XALD) ------ [Backend XALD]
+        |                cuando hay conexión (sync HTTPS/REST)
 
 [Usuario final] <-- consulta saldo, reportes, alertas -- [App XALD]
 ```
