@@ -81,16 +81,15 @@ Estas son las condiciones que ya vienen dadas para el proyecto y que no podemos 
 
 ## Business Context 
 
-Aquí se muestra quién o qué interactúa con XALD desde afuera, sin entrar en detalles técnicos de cómo se comunican. Ahora el sistema también incluye la API de Gemini de Google, que ayuda a sugerir en qué categoría va cada gasto.
-
+Aquí se muestra quién o qué interactúa con XALD desde afuera, sin entrar en detalles técnicos de cómo se comunican. Esta tabla está alineada con el diagrama de Contexto (C1) del modelo C4: solo se listan los actores y sistemas que están fuera de la frontera del sistema XALD.
 
 | Actor / Sistema externo | Descripción | Entradas hacia XALD | Salidas desde XALD |
 | --- | --- | --- | --- |
 | **Usuario Final** | Propietario de la información financiera | Corrección manual de categorías, registros manuales, consultas de reportes | Visualización de saldo, historial de transacciones, reportes de gasto |
-| **Entidades Bancarias / SMS** | Proveedores de mensajería del sistema operativo que emiten alertas de movimientos | Mensaje de texto (SMS) con monto, comercio y fecha | Visualización de saldo, historial de transacciones, reportes de gasto |
-| **Backend XALD / Servidor** | Sistema remoto para sincronización y reportes | Confirmación de sincronización, agregaciones de reportes | Cola de transacciones pendientes (Sync Queue) |
+| **SO Android / Entidades Bancarias (SMS)** | Sistema operativo que entrega las notificaciones/SMS emitidos por las entidades bancarias | Mensaje de texto (SMS) con monto, comercio y fecha | *Ninguna — el conector es unidireccional (ver C1): XALD solo escucha, no le responde nada al SO ni al banco* |
 | **Google Gemini API** | API de IA externa para la inferencia de categorías de gasto | Categoría sugerida en formato JSON | Cadena de texto limpia del comercio / origen |
 
+**Nota de alcance:** el Backend XALD (servidor de sincronización) **no aparece como actor externo**, porque en el modelo C4 se considera parte interna del sistema XALD, igual que la base de datos local — así es como está representado en el diagrama de Contexto (C1). Su rol de sincronización y almacenamiento remoto se documenta en el nivel de Contenedores (C2), no en el Contexto de negocio.
 
 La idea central es que el usuario casi no tiene que hacer nada manualmente: el sistema capta la información sola desde los SMS bancarios, usa la IA de Gemini para sugerir la categoría del gasto, y el usuario solo interviene para revisar, corregir o consultar.
 
