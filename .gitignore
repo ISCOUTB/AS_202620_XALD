@@ -1,0 +1,18 @@
+# Gradle & Build outputs
+.gradle/
+**/build/
+build/
+
+# IDE files
+.idea/
+*.iml
+
+# Local properties & secrets
+local.properties
+**/local.properties
+
+# Native builds & OS files
+.externalNativeBuild/
+.cxx/
+captures/
+.DS_Store
