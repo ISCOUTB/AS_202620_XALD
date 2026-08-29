@@ -1,0 +1,13 @@
+## ADR-0003: Restricción de Plataforma a Android y Exclusión de iOS
+**Estado:** Aprobado
+
+### Contexto:
+La propuesta de valor de XALD se basa en la captura pasiva y automática de transacciones mediante la lectura de mensajes bancarios (SMS). Sin embargo, el sistema operativo iOS (Apple) impone políticas strictly de privacidad en su *sandbox* que impiden a aplicaciones de terceros acceder o interceptar el buzón de SMS del dispositivo en segundo plano.
+
+**Decisión:** Limitar el alcance arquitectónico del cliente exclusivamente al ecosistema **Android**, utilizando mecanismos nativos como `BroadcastReceiver` con el permiso `RECEIVE_SMS`.
+
+### Consecuencias:
+
+**Positivas:** Permite la automatización completa del flujo de ingesta sin requerir fricción o interacción manual por parte del usuario.
+
+**Negativas / Compensaciones:** Incompatibilidad absoluta con dispositivos iOS, restringiendo el alcance de usuarios potenciales a solo aquellos con dispositivos Android.

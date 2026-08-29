@@ -1,18 +1,21 @@
 # Gradle & Build outputs
 .gradle/
-**/build/
 build/
-
-# IDE files
-.idea/
-*.iml
+**/build/
 
 # Local properties & secrets
 local.properties
-**/local.properties
 
-# Native builds & OS files
+# IDE settings (Android Studio / IntelliJ)
+.idea/
+*.iml
+
+# Native build leftovers (si usas C/C++)
 .externalNativeBuild/
 .cxx/
 captures/
+
+# OS generated files
 .DS_Store
+
+
