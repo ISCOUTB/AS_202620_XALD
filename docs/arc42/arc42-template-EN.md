@@ -303,9 +303,109 @@ Mapping of Building Blocks to Infrastructure
 
 # Quality Requirements {#section-quality-scenarios}
 
-## Quality Requirements Overview {#_quality_requirements_overview}
-
 ## Quality Scenarios {#_quality_scenarios}
+
+Cada escenario sigue las seis partes que exige arc42: fuente, estímulo, artefacto, entorno, respuesta y medida de respuesta. Cada medida declara explícitamente su umbral, la carga bajo la cual se evalúa y la herramienta de verificación.
+
+### ESC-01 · Registro de transacción sin conexión {#esc-01}
+
+| Parte | Contenido |
+|---|---|
+| **Fuente** | Entidad bancaria (mensaje SMS) |
+| **Estímulo** | Llega una notificación de transacción al dispositivo |
+| **Artefacto** | Módulo de captura y módulo de persistencia local |
+| **Entorno** | Operación normal, dispositivo en modo avión (sin conexión) |
+| **Respuesta** | El sistema extrae los datos, registra la transacción en el almacenamiento local cifrado y la marca como pendiente de sincronizar |
+| **Medida** | **Umbral:** ≤ 2 s desde la recepción del SMS hasta la persistencia confirmada · **Carga:** 20 SMS consecutivos con 1 s de separación · **Herramienta:** prueba instrumentada con `adb shell am broadcast` y medición por *timestamp* en el log |
+
+**Atributo:** Disponibilidad · **Objetivo:** OB-02 · **Restricción:** RT-02
+
+### ESC-02 · Indisponibilidad del servicio de categorización {#esc-02}
+
+| Parte | Contenido |
+|---|---|
+| **Fuente** | Servicio externo de categorización |
+| **Estímulo** | La petición falla o excede el tiempo de espera |
+| **Artefacto** | Módulo de categorización |
+| **Entorno** | Con conexión disponible, servicio externo degradado o caído |
+| **Respuesta** | La transacción ya registrada se conserva, se marca como `SIN_CLASIFICAR` y queda disponible para categorización manual |
+| **Medida** | **Umbral:** 0 transacciones perdidas; corte a los 5 s; máximo 3 reintentos con espera creciente · **Carga:** 50 transacciones con el servicio simulado como no disponible · **Herramienta:** servidor simulado (*mock*) que devuelve error 503, verificación por conteo en base de datos |
+
+**Atributo:** Tolerancia a fallos · **Objetivo:** OB-01 · **Restricción:** RT-04
+
+### ESC-03 · Incorporación de una nueva entidad bancaria {#esc-03}
+
+| Parte | Contenido |
+|---|---|
+| **Fuente** | Equipo de desarrollo |
+| **Estímulo** | Se requiere soportar el formato de una entidad no contemplada |
+| **Artefacto** | Módulo de captura (estrategias de lectura) |
+| **Entorno** | Tiempo de desarrollo |
+| **Respuesta** | Se agrega una estrategia nueva sin modificar el código de las entidades ya soportadas |
+| **Medida** | **Umbral:** 1 archivo nuevo y 0 modificaciones fuera del registro de estrategias; esfuerzo ≤ 4 h · **Carga:** incorporación de una entidad real no soportada · **Herramienta:** `git diff --stat` sobre el *commit* de la incorporación |
+
+**Atributo:** Modificabilidad · **Objetivo:** OB-04 · **Restricción:** RT-01
+
+### ESC-04 · Protección de la información almacenada {#esc-04}
+
+| Parte | Contenido |
+|---|---|
+| **Fuente** | Atacante con acceso físico al dispositivo |
+| **Estímulo** | Intento de lectura directa del archivo de base de datos |
+| **Artefacto** | Módulo de persistencia local |
+| **Entorno** | Dispositivo perdido, robado o comprometido |
+| **Respuesta** | El contenido resulta ilegible sin la clave, resguardada en el almacén seguro del sistema operativo |
+| **Medida** | **Umbral:** 0 campos financieros legibles en texto plano · **Carga:** base de datos con 500 transacciones · **Herramienta:** extracción del archivo con `adb pull` e inspección con `strings` y `sqlite3` |
+
+**Atributo:** Seguridad · **Objetivo:** OB-03 · **Restricciones:** RT-03 y RL-01
+
+### ESC-05 · Resolución de conflictos al sincronizar {#esc-05}
+
+| Parte | Contenido |
+|---|---|
+| **Fuente** | Usuario con la aplicación en más de un dispositivo |
+| **Estímulo** | La misma transacción se modifica en dos dispositivos mientras ambos están sin conexión |
+| **Artefacto** | Módulo de sincronización |
+| **Entorno** | Restablecimiento de la conexión en ambos dispositivos |
+| **Respuesta** | Se aplica la política de última escritura tomando la marca temporal más reciente |
+| **Medida** | **Umbral:** 100 % de conflictos resueltos automáticamente, 0 transacciones distintas perdidas · **Carga:** 30 transacciones en conflicto simultáneo · **Herramienta:** dos emuladores con relojes sincronizados, verificación por comparación de estado final contra el esperado |
+
+**Atributo:** Consistencia · **Objetivo:** OB-02 · **Restricción:** RT-05
+
+## Árbol de utilidad {#_quality_requirements_overview}
+
+Notación: **(Impacto en el negocio, Riesgo técnico)** en escala Alto / Medio / Bajo.
+
+```
+Utilidad del sistema XALD
+│
+├── DISPONIBILIDAD
+│   └── ESC-01 · Registro sin conexión ......................... (A, A)
+│         Propuesta de valor central; su fallo invalida el producto.
+│
+├── TOLERANCIA A FALLOS
+│   └── ESC-02 · Fallo del servicio de categorización .......... (A, M)
+│         Perder una transacción rompe la confianza;
+│         la mitigación es conocida y de bajo costo.
+│
+├── SEGURIDAD
+│   └── ESC-04 · Protección de datos almacenados ............... (A, M)
+│         Obligación legal (RL-01); el riesgo baja al usar
+│         mecanismos estándar de la plataforma.
+│
+├── CONSISTENCIA
+│   └── ESC-05 · Conflictos al sincronizar ..................... (M, A)
+│         Riesgo alto por la complejidad; impacto medio
+│         porque solo afecta a usuarios multidispositivo.
+│
+└── MODIFICABILIDAD
+    └── ESC-03 · Nueva entidad bancaria ........................ (M, M)
+          Afecta la cobertura, no la operación.
+```
+
+**Prioridad de atención:** ESC-01 → ESC-02 → ESC-04 → ESC-05 → ESC-03
+
+Los escenarios calificados **(A, A)** y **(A, M)** son los que condicionan las decisiones arquitectónicas registradas en los ADR.
 
 # Risks and Technical Debts {#section-technical-risks}
 
