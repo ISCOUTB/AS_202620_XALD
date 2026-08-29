@@ -220,8 +220,6 @@ Esta sección muestra, para cada uno de los 5 escenarios de calidad definidos en
 4. **Persistencia local:** el objeto `Transaction` se envía al Data & Sync Module, que cifra los campos con AES-256, guarda la fila en SQLite y agrega el registro a la Sync Queue con su UUID y timestamp.
 5. **Notificación a la UI:** el Data & Sync Module emite el nuevo estado a través de un stream observable (propuesta: `StateFlow` de Kotlin), y el UI & Dashboard, que está suscrito a ese stream, actualiza el saldo y el reporte en pantalla automáticamente.
 
-> ⚠️ **Nota:** el mecanismo exacto de notificación a la UI (`StateFlow`, `LiveData`, u otro) no estaba especificado en el repositorio — propongo `StateFlow` por ser el estándar actual en Android/Kotlin, pero confírmenlo con quien programe el módulo de UI para que el diagrama sea 100% fiel al código.
-
 ```mermaid
 sequenceDiagram
     participant SO as Sistema Operativo (Android)
@@ -262,8 +260,6 @@ sequenceDiagram
 3. Si los 3 intentos fallan, la transacción se guarda igual, con la categoría **"Sin Categorizar"** — nunca se bloquea ni se pierde el registro.
 4. Un proceso en segundo plano (propuesta: *worker* periódico) revisa las transacciones "Sin Categorizar" y reintenta la categorización cuando el servicio vuelve a responder.
 5. Al recibir una categoría válida, se actualiza la transacción ya guardada, sin duplicarla.
-
-> ⚠️ **Nota:** el mecanismo de reintento con espera creciente y el *worker* de reclasificación periódica son una propuesta técnica razonable, construida a partir de la medida que ya está definida en ESC-02 (Sección 10) — no están confirmados en el código real. Validen con quien programe el Processing & Parser Module si el mecanismo real usa `WorkManager`, un temporizador simple, o algo distinto.
 
 ```mermaid
 sequenceDiagram
