@@ -1,52 +1,30 @@
 # AS_20262_XALD
 PROYECTO XALD, APP FINANZAS PERSONALES
 
-## Esqueleto de Ejecución
- XALDAPP/app/src/main/java/com/proyecto/xald
 # Comandos de Ejecución y Verificación
 
-## 1. Desde la carpeta del proyecto (`XALDAPP/`)
+### Guía de Verificación y Compilación Local
 
-**PowerShell (Windows):**
+##### Requisitos: JDK 17 (incluido en Android Studio JBR) y Android SDK configurados.
+
+##### Ejecución: Abre una consola de PowerShell en la raíz del repositorio y ejecuta el comando de arranque para validar los 5 módulos (:app, :corefinanciero, :parser, :syncqueue y :aigemini):
 ```powershell
-$env:ANDROID_HOME="C:\Users\(usuario)\AppData\Local\Android\Sdk"; $env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat test
+$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"; $env:ANDROID_HOME="C:\Users\OSCARDILAN\AppData\Local\Android\Sdk"; .\XALDAPP\gradlew.bat -p XALDAPP test
 ```
-**Android Studio: fuera del directorio**
-```as
-$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"; $env:ANDROID_HOME="C:\Users\(us)\AppData\Local\Android\Sdk"; .\XALDAPP\gradlew.bat -p XALDAPP test
-```
-
-## 2. Desde la raíz del repositorio apuntando al subproyecto
-
-**PowerShell (Windows):**
-```powershell
-$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"; $env:ANDROID_HOME="C:\Users\(usuario)\AppData\Local\Android\Sdk"; .\XALDAPP\gradlew.bat -p XALDAPP test
-```
-
-**CMD (Windows con variables globales configuradas):**
-```cmd
-XALDAPP\gradlew.bat -p XALDAPP test
-```
-
-**Linux / macOS:**
-```bash
-./XALDAPP/gradlew -p XALDAPP test
-```
-
----
 
 ## Salida Esperada en Consola
 
-Al ejecutar cualquiera de los comandos anteriores, la suite de pruebas unitarias validará el entorno. El resultado exitoso debe verse así:
-<img width="1105" height="284" alt="Captura de pantalla 2026-08-23 202449" src="https://github.com/user-attachments/assets/58f7b82c-684e-4f23-a2b8-c4c95890dc4a" />
+##### Al ejecutar el comando anterior, la suite de pruebas unitarias validará el entorno. El resultado exitoso debe verse así:
+
+<img width="1104" height="254" alt="Captura de pantalla 2026-08-29 160428" src="https://github.com/user-attachments/assets/1ea8b153-e37b-4a51-a09c-b43a0b5f3c04" />
 
 
 ```plaintext
-Reusing configuration cache.
+Calculating task graph as configuration cache cannot be reused because file 'settings.gradle.kts' has changed.
 
-BUILD SUCCESSFUL in 1s
-24 actionable tasks: 24 up-to-date
-Configuration cache entry reused.
+BUILD SUCCESSFUL in 46s
+84 actionable tasks: 84 executed
+Configuration cache entry stored.
 ```
 
 
