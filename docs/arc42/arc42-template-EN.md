@@ -210,14 +210,14 @@ Este escenario describe el flujo desde que el celular recibe una notificación b
 
 1. **Recepción del Evento:** El Sistema Operativo Android recibe un SMS del banco y activa el BroadcastReceiver del *Ingestion Module*.
 
-2. **Filtrado:** El *Ingestion Module* valida el remitente y extrae el texto plano.
+2. **Filtrado:** El *Sistema de ingesta* valida el remitente y extrae el texto plano.
 
-3. **Parsing Local (Regex):** El *Processing & Parser Module* evalúa el texto con expresiones regulares.
+3. **Parsing Local (Regex):** El *Parser Module* evalúa el texto con expresiones regulares.
 
    * Caso A (Regex exitoso): Si reconoce el comercio y monto, genera el objeto Transaction.
    * Caso B (Comercio ambiguo): Envía el texto a la *Gemini API* vía HTTPS con un prompt estructurado en JSON para extraer la categoría y comercio limpio.
 
-4. **Persistencia Local:** El objeto Transaction se envía al *Data & Sync Module*, el cual:
+4. **Persistencia Local:** El objeto Transaction se envía al * Synqueue Module*, el cual:
 
    * Cifra los campos con *AES-256*.
    * Guarda la fila en la DB local (SQLite).
@@ -231,7 +231,7 @@ Este escenario describe el flujo desde que el celular recibe una notificación b
 
 Este escenario describe cómo se respaldan las transacciones generadas en modo offline cuando el dispositivo recupera la conexión a internet.
 
-1. **Detección de Red:** El *Data & Sync Module* detecta que hay conexión a internet activa.
+1. **Detección de Red:** El *Syncqueue Module* detecta que hay conexión a internet activa.
 
 2. **Lectura de Cola:** Lee los lotes pendientes de la tabla Sync Queue local.
 
@@ -239,7 +239,7 @@ Este escenario describe cómo se respaldan las transacciones generadas en modo o
 
 4. **Resolución LWW:** El *Backend XALD* procesa los registros. Si hay un conflicto de edición entre el servidor y el cliente, aplica la regla Last-Write-Wins evaluando la marca de tiempo (timestamp).
 
-5. **Confirmación y Limpieza:** El *Backend XALD* responde con un código de éxito. El *Data & Sync Module* elimina los ítems sincronizados de la Sync Queue local.
+5. **Confirmación y Limpieza:** El *Backend XALD* responde con un código de éxito. El *Syncqueue Module* elimina los ítems sincronizados de la Sync Queue local.
 
 # Deployment View {#section-deployment-view}
 
