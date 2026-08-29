@@ -7,7 +7,7 @@ PROYECTO XALD, APP FINANZAS PERSONALES
 
 ##### Requisitos: JDK 17 (incluido en Android Studio JBR) y Android SDK configurados.
 
-##### Ejecución: Abre una consola de PowerShell en la raíz del repositorio y ejecuta el comando de arranque para validar los 5 módulos (:app, :corefinanciero, :parser, :syncqueue y :aigemini):
+##### Ejecución: Abre una consola de PowerShell en la raíz del repositorio y ejecute el comando de arranque para validar los 5 módulos (:app, :corefinanciero, :parser, :syncqueue y :aigemini):
 ```powershell
 $env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"; $env:ANDROID_HOME="C:\Users\<user>\AppData\Local\Android\Sdk"; .\XALDAPP\gradlew.bat -p XALDAPP test
 ```
