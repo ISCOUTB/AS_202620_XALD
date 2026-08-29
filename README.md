@@ -19,14 +19,6 @@ $env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"; $env:ANDROID_HOME=
 <img width="1104" height="254" alt="Captura de pantalla 2026-08-29 160428" src="https://github.com/user-attachments/assets/1ea8b153-e37b-4a51-a09c-b43a0b5f3c04" />
 
 
-```plaintext
-Calculating task graph as configuration cache cannot be reused because file 'settings.gradle.kts' has changed.
-
-BUILD SUCCESSFUL in 46s
-84 actionable tasks: 84 executed
-Configuration cache entry stored.
-```
-
 
 ### Descripción de la app
 
