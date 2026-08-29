@@ -225,6 +225,7 @@ Este escenario describe el flujo desde que el celular recibe una notificación b
 
 5. **Notificación a la UI:** El *UI & Dashboard* detecta el cambio en la base de datos y actualiza el saldo y reporte en pantalla.
 
+Este flujo es el que verifica **ESC-01 · Registro de transacción sin conexión** (ver Sección 10).
 ---
 
 ### Escenario 2: Sincronización Asíncrona Offline-First con el Backend
@@ -240,6 +241,8 @@ Este escenario describe cómo se respaldan las transacciones generadas en modo o
 4. **Resolución LWW:** El *Backend XALD* procesa los registros. Si hay un conflicto de edición entre el servidor y el cliente, aplica la regla Last-Write-Wins evaluando la marca de tiempo (timestamp).
 
 5. **Confirmación y Limpieza:** El *Backend XALD* responde con un código de éxito. El *Data & Sync Module* elimina los ítems sincronizados de la Sync Queue local.
+
+Este flujo es el que verifica **ESC-05 · Resolución de conflictos al sincronizar** (ver Sección 10).
 
 # Deployment View {#section-deployment-view}
 
