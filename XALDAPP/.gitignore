@@ -2,6 +2,8 @@
 .gradle/
 build/
 **/build/
+.kotlin/
+**/bin/
 
 # Local properties & secrets
 local.properties
@@ -9,13 +11,21 @@ local.properties
 # IDE settings (Android Studio / IntelliJ)
 .idea/
 *.iml
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries
+.idea/libraries
 
 # Native build leftovers (si usas C/C++)
 .externalNativeBuild/
 .cxx/
 captures/
 
-# OS generated files
+# OS & Log generated files
 .DS_Store
+Thumbs.db
+*.log
 
 
