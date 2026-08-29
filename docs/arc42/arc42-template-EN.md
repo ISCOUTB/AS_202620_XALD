@@ -204,45 +204,199 @@ Descomposición del bloque **"App Móvil Android"** en sus cuatro módulos inter
 
 # Runtime View
 
-### Escenario 1: Captura, Parsing e Inferencia Automática de SMS (Módulo A-01)
+Esta sección muestra, para cada uno de los 5 escenarios de calidad definidos en la Sección 10 (ESC-01 a ESC-05), cómo interactúan los bloques de construcción de XALD (Sección 5) durante su ejecución. Cada escenario incluye un diagrama de secuencia UML (formato Mermaid, renderizado automáticamente por GitHub) además de la descripción paso a paso.
 
-Este escenario describe el flujo desde que el celular recibe una notificación bancaria hasta que la transacción queda guardada localmente.
+## 6.1 Runtime Scenario 1 — Captura, Parsing e Inferencia Automática de SMS (verifica ESC-01)
 
-1. **Recepción del Evento:** El Sistema Operativo Android recibe un SMS del banco y activa el BroadcastReceiver del *Ingestion Module*.
+**Motivación:** este es el flujo central del módulo A-01: describe cómo XALD convierte un SMS bancario en una transacción financiera guardada, sin que el usuario tenga que hacer nada, incluso sin conexión a internet.
 
-2. **Filtrado:** El *Ingestion Module* valida el remitente y extrae el texto plano.
+**Pasos del escenario:**
 
-3. **Parsing Local (Regex):** El *Processing & Parser Module* evalúa el texto con expresiones regulares.
+1. **Recepción del evento:** el sistema operativo Android recibe un SMS del banco y activa el BroadcastReceiver del Ingestion Module.
+2. **Filtrado:** el Ingestion Module valida el remitente y extrae el texto plano.
+3. **Parsing local (Regex):** el Processing & Parser Module evalúa el texto con expresiones regulares.
+   - **Caso A (Regex exitoso):** si reconoce el comercio y el monto, genera directamente el objeto `Transaction`.
+   - **Caso B (comercio ambiguo):** envía el texto a la Gemini API. Si la API falla o no responde, este caso se resuelve según el flujo detallado en el **Escenario 2 (ESC-02)**.
+4. **Persistencia local:** el objeto `Transaction` se envía al Data & Sync Module, que cifra los campos con AES-256, guarda la fila en SQLite y agrega el registro a la Sync Queue con su UUID y timestamp.
+5. **Notificación a la UI:** el Data & Sync Module emite el nuevo estado a través de un stream observable (propuesta: `StateFlow` de Kotlin), y el UI & Dashboard, que está suscrito a ese stream, actualiza el saldo y el reporte en pantalla automáticamente.
 
-   * Caso A (Regex exitoso): Si reconoce el comercio y monto, genera el objeto Transaction.
-   * Caso B (Comercio ambiguo): Envía el texto a la *Gemini API* vía HTTPS con un prompt estructurado en JSON para extraer la categoría y comercio limpio.
+> ⚠️ **Nota:** el mecanismo exacto de notificación a la UI (`StateFlow`, `LiveData`, u otro) no estaba especificado en el repositorio — propongo `StateFlow` por ser el estándar actual en Android/Kotlin, pero confírmenlo con quien programe el módulo de UI para que el diagrama sea 100% fiel al código.
 
-4. **Persistencia Local:** El objeto Transaction se envía al *Data & Sync Module*, el cual:
+```mermaid
+sequenceDiagram
+    participant SO as Sistema Operativo (Android)
+    participant ING as Ingestion Module
+    participant PAR as Processing & Parser Module
+    participant GEM as Google Gemini API
+    participant DAT as Data & Sync Module
+    participant UI as UI & Dashboard
 
-   * Cifra los campos con *AES-256*.
-   * Guarda la fila en la DB local (SQLite).
-   * Agrega el registro a la cola de sincronización (Sync Queue) con su UUID y timestamp.
+    SO->>ING: Broadcast SMS entrante
+    ING->>ING: Valida remitente, extrae texto plano
+    ING->>PAR: Texto plano del SMS
+    PAR->>PAR: Evalúa con Regex
+    alt Caso A: Regex reconoce comercio y monto
+        PAR->>DAT: Transaction (comercio, monto, fecha)
+    else Caso B: comercio ambiguo
+        PAR->>GEM: Texto del comercio (HTTPS/JSON)
+        GEM-->>PAR: Categoría sugerida (ver ESC-02 si falla)
+        PAR->>DAT: Transaction (con categoría)
+    end
+    DAT->>DAT: Cifra AES-256, guarda en SQLite,<br/>agrega a Sync Queue (UUID + timestamp)
+    DAT-->>UI: Emite nuevo estado (StateFlow)
+    UI->>UI: Actualiza saldo y reportes en pantalla
+```
 
-5. **Notificación a la UI:** El *UI & Dashboard* detecta el cambio en la base de datos y actualiza el saldo y reporte en pantalla.
+**Aspectos notables:** la IA nunca bloquea el flujo — solo interviene en el Caso B, y aun así el resultado se integra al mismo camino de persistencia que el Caso A. Esto es lo que le da a XALD su característica de captura rápida y no bloqueante.
 
-Este flujo es el que verifica **ESC-01 · Registro de transacción sin conexión** (ver Sección 10).
 ---
 
-### Escenario 2: Sincronización Asíncrona Offline-First con el Backend
+## 6.2 Runtime Scenario 2 — Indisponibilidad del Servicio de Categorización (verifica ESC-02)
 
-Este escenario describe cómo se respaldan las transacciones generadas en modo offline cuando el dispositivo recupera la conexión a internet.
+**Motivación:** este escenario detalla qué pasa exactamente cuando la Gemini API falla, algo que en el Escenario 1 solo se mencionaba de forma general. Aquí se especifican los tiempos, los reintentos y cómo se recupera la categoría más adelante, según la medida ya definida en la Sección 10 (umbral de 5 s, máximo 3 reintentos con espera creciente, 0 transacciones perdidas).
 
-1. **Detección de Red:** El *Data & Sync Module* detecta que hay conexión a internet activa.
+**Pasos del escenario:**
 
-2. **Lectura de Cola:** Lee los lotes pendientes de la tabla Sync Queue local.
+1. El Processing & Parser Module envía la solicitud de categoría a la Gemini API.
+2. Si no hay respuesta en **5 segundos**, se reintenta con espera creciente (propuesta: ~2 s, luego ~4 s — *backoff* exponencial simple).
+3. Si los 3 intentos fallan, la transacción se guarda igual, con la categoría **"Sin Categorizar"** — nunca se bloquea ni se pierde el registro.
+4. Un proceso en segundo plano (propuesta: *worker* periódico) revisa las transacciones "Sin Categorizar" y reintenta la categorización cuando el servicio vuelve a responder.
+5. Al recibir una categoría válida, se actualiza la transacción ya guardada, sin duplicarla.
 
-3. **Envío HTTPS:** Realiza una petición POST /api/v1/sync al *Backend XALD* enviando el lote JSON.
+> ⚠️ **Nota:** el mecanismo de reintento con espera creciente y el *worker* de reclasificación periódica son una propuesta técnica razonable, construida a partir de la medida que ya está definida en ESC-02 (Sección 10) — no están confirmados en el código real. Validen con quien programe el Processing & Parser Module si el mecanismo real usa `WorkManager`, un temporizador simple, o algo distinto.
 
-4. **Resolución LWW:** El *Backend XALD* procesa los registros. Si hay un conflicto de edición entre el servidor y el cliente, aplica la regla Last-Write-Wins evaluando la marca de tiempo (timestamp).
+```mermaid
+sequenceDiagram
+    participant PAR as Processing & Parser Module
+    participant GEM as Google Gemini API
+    participant DAT as Data & Sync Module
+    participant WM as Proceso en segundo plano (reclasificación)
 
-5. **Confirmación y Limpieza:** El *Backend XALD* responde con un código de éxito. El *Data & Sync Module* elimina los ítems sincronizados de la Sync Queue local.
+    PAR->>GEM: Solicitud de categoría (texto del comercio)
+    alt Sin respuesta en 5 s (timeout)
+        PAR->>GEM: Reintento 1 (espera ~2 s)
+        alt Sigue sin responder
+            PAR->>GEM: Reintento 2 (espera ~4 s)
+            alt 3er intento también falla
+                PAR->>DAT: Transaction con categoría "Sin Categorizar"
+            end
+        end
+    else Responde a tiempo
+        GEM-->>PAR: Categoría sugerida (JSON)
+        PAR->>DAT: Transaction con categoría real
+    end
 
-Este flujo es el que verifica **ESC-05 · Resolución de conflictos al sincronizar** (ver Sección 10).
+    Note over WM,DAT: Reclasificación automática posterior
+    WM->>DAT: Consulta periódica de transacciones "Sin Categorizar"
+    WM->>GEM: Reintenta categorización
+    GEM-->>WM: Categoría sugerida (JSON)
+    WM->>DAT: Actualiza la transacción con la categoría real
+```
+
+**Aspectos notables:** el diseño garantiza el umbral de "0 transacciones perdidas" de ESC-01 porque el registro nunca depende de que la IA responda — la categorización es un enriquecimiento posterior, no un requisito para guardar el gasto.
+
+---
+
+## 6.3 Runtime Scenario 3 — Resolución de Conflictos al Sincronizar (verifica ESC-05)
+
+**Motivación:** este escenario extiende el flujo general de sincronización (ya descrito como parte de la cola Sync Queue) al caso específico de la Sección 10: el mismo usuario edita la misma transacción en dos dispositivos distintos mientras ambos están sin conexión.
+
+**Pasos del escenario:**
+
+1. El Dispositivo A y el Dispositivo B editan la misma transacción mientras ambos están offline, cada uno con su propio timestamp.
+2. El Dispositivo A recupera la conexión primero y sincroniza su versión con el Backend XALD; como no hay nada más registrado para esa transacción todavía, se guarda sin conflicto.
+3. El Dispositivo B recupera la conexión después y envía su propia versión de la misma transacción.
+4. El Backend XALD detecta que ya existe un registro previo para esa transacción y aplica **Last-Write-Wins (LWW)**: compara los timestamps y conserva la versión más reciente.
+5. El dispositivo cuya versión no ganó actualiza su copia local con la versión vencedora, para que ambos dispositivos queden consistentes.
+
+```mermaid
+sequenceDiagram
+    participant D1 as Dispositivo A (Data & Sync Module)
+    participant D2 as Dispositivo B (Data & Sync Module)
+    participant BK as Backend XALD (Motor LWW)
+
+    Note over D1,D2: Ambos dispositivos offline,<br/>editan la misma transacción X
+    D1->>D1: Edita transacción X (timestamp T1)
+    D2->>D2: Edita transacción X (timestamp T2)
+
+    D1->>BK: POST /api/v1/sync (transacción X, T1)
+    BK->>BK: Guarda X con T1 (sin conflicto todavía)
+    BK-->>D1: Confirmación de éxito
+
+    D2->>BK: POST /api/v1/sync (transacción X, T2)
+    BK->>BK: Detecta conflicto: X ya existe con T1
+    alt T2 es más reciente
+        BK->>BK: Aplica LWW: conserva la versión con T2
+    else T1 es más reciente
+        BK->>BK: Aplica LWW: conserva la versión con T1
+    end
+    BK-->>D2: Confirmación (con la versión vencedora)
+    D2->>D2: Actualiza su copia local con la versión vencedora
+```
+
+**Aspectos notables:** este es el escenario de mayor riesgo técnico del árbol de utilidad (Riesgo: Alta), porque depende de que los relojes de ambos dispositivos sean razonablemente confiables para que LWW elija correctamente.
+
+---
+
+## 6.4 Runtime Scenario 4 — Incorporación de una Nueva Entidad Bancaria (verifica ESC-03)
+
+**Motivación:** a diferencia de los escenarios anteriores, este no ocurre en producción sino en tiempo de desarrollo — describe cómo el equipo agrega soporte para un banco nuevo sin modificar el código de los bancos ya soportados (objetivo de Modificabilidad).
+
+**Pasos del escenario:**
+
+1. El equipo de desarrollo identifica el formato de SMS de una entidad bancaria no soportada.
+2. Se agrega **un archivo nuevo** al registro de reglas del Regex Engine, sin tocar los archivos de las entidades ya soportadas.
+3. Se hace commit del cambio; `git diff --stat` confirma que solo se modificó el registro de reglas (0 cambios fuera de él).
+4. Se despliega la nueva versión del Processing & Parser Module.
+5. A partir de ese momento, el módulo reconoce el nuevo formato sin afectar el comportamiento de los bancos existentes.
+
+```mermaid
+sequenceDiagram
+    participant DEV as Equipo de desarrollo
+    participant REG as Registro de reglas (Regex Engine)
+    participant GIT as Control de versiones (git)
+    participant PAR as Processing & Parser Module
+
+    DEV->>DEV: Identifica el nuevo formato de SMS del banco
+    DEV->>REG: Agrega una regla nueva (archivo nuevo)
+    DEV->>GIT: Commit del cambio
+    GIT-->>DEV: git diff --stat confirma 0 cambios<br/>fuera del registro de reglas
+    DEV->>PAR: Despliega la nueva versión
+    Note over PAR: Reconoce el nuevo formato sin afectar<br/>las entidades ya soportadas
+```
+
+**Aspectos notables:** este escenario es el que justifica directamente la decisión del ADR-0002 (Parsing Híbrido) — la separación en un registro de reglas es lo que hace posible este bajo esfuerzo de modificación (≤ 4 h, según la medida de ESC-03).
+
+---
+
+## 6.5 Runtime Scenario 5 — Protección de Datos Almacenados ante Acceso No Autorizado (verifica ESC-04)
+
+**Motivación:** este escenario describe qué pasa si alguien obtiene acceso físico al dispositivo (perdido o robado) e intenta leer la información financiera directamente del almacenamiento.
+
+**Pasos del escenario:**
+
+1. Un atacante con acceso físico extrae el archivo de base de datos del dispositivo (por ejemplo, con `adb pull`).
+2. Intenta leer el contenido directamente con herramientas como `strings` o `sqlite3`.
+3. El contenido resulta ilegible porque está cifrado con AES-256.
+4. El atacante intentaría obtener la llave de cifrado, pero esta vive en el Android Keystore, protegida por el hardware/cuenta del dispositivo y nunca se guarda junto a los datos.
+5. Sin la llave, el 0% de los campos financieros es legible en texto plano.
+
+```mermaid
+sequenceDiagram
+    participant ATK as Atacante (acceso físico)
+    participant FS as Sistema de archivos del dispositivo
+    participant DB as Base de datos local (AES-256)
+    participant KS as Android Keystore
+
+    ATK->>FS: Extrae el archivo de base de datos (ej. adb pull)
+    ATK->>DB: Intenta leer el contenido directamente
+    DB-->>ATK: Datos ilegibles (cifrados con AES-256)
+    ATK->>KS: Intenta obtener la llave de cifrado
+    KS-->>ATK: Acceso denegado (llave protegida por el sistema)
+    Note over ATK,DB: Sin la llave, 0% de los campos<br/>financieros es legible en texto plano
+```
+
+**Aspectos notables:** este escenario verifica directamente la restricción RL-01 (Habeas Data) y RT-03 — la seguridad no depende de ocultar el archivo, sino de que sea inútil sin la llave, que es la práctica correcta de cifrado en reposo.
 
 # Deployment View {#section-deployment-view}
 
