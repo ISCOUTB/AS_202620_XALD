@@ -9,7 +9,7 @@ PROYECTO XALD, APP FINANZAS PERSONALES
 
 ##### Ejecución: Abre una consola de PowerShell en la raíz del repositorio y ejecuta el comando de arranque para validar los 5 módulos (:app, :corefinanciero, :parser, :syncqueue y :aigemini):
 ```powershell
-$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"; $env:ANDROID_HOME="C:\Users\OSCARDILAN\AppData\Local\Android\Sdk"; .\XALDAPP\gradlew.bat -p XALDAPP test
+$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"; $env:ANDROID_HOME="C:\Users\<user>\AppData\Local\Android\Sdk"; .\XALDAPP\gradlew.bat -p XALDAPP test
 ```
 
 ## Salida Esperada en Consola
