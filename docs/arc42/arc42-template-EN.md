@@ -5,7 +5,7 @@
 
 # Introduction and Goals 
 
-Esta sección presenta una visión general de XALD: qué problema resuelve, cómo funciona, qué objetivos de calidad persigue y quiénes son las partes interesadas. Sirve como punto de entrada para el resto de la documentación de arquitectura.
+Esta sección presenta una visión general de XALD: qué problema resuelve, cómo funciona, qué objetivos de negocio y de calidad persigue y quiénes son las partes interesadas. Sirve como punto de entrada para el resto de la documentación de arquitectura.
 
 ## Requirements Overview 
 
@@ -25,22 +25,30 @@ En la gestión financiera personal actual se identifican dos limitaciones estruc
 
 **Resiliencia:** si no hay internet o la IA no responde, el gasto se guarda igual bajo "Sin Categorizar" y se reclasifica automáticamente al volver la señal — nunca se pierde un dato. Las transacciones pendientes de sincronizar viven en una Sync Queue que garantiza orden cronológico exacto (timestamps/UUIDs) al reconectar, evitando duplicados o saldos sobrescritos.
 
+## Business Goals
+
+Los siguientes son los objetivos de negocio que justifican la existencia del sistema. Cada uno indica a qué interesado le importa y por qué. Los objetivos de calidad de la sección siguiente se derivan de estos.
+
+| ID | Objetivo de negocio | Interesado principal | Por qué le importa |
+|---|---|---|---|
+| **OB-01** | Eliminar la fricción en la entrada de datos, que es la causa del abandono de la app y de la pérdida de integridad del historial financiero | Usuario final | Quiere el control de sus gastos sin dedicar tiempo diario a registrarlos a mano |
+| **OB-02** | Desacoplar la aplicación de la conectividad, de modo que sea utilizable con o sin señal | Usuario final | Registra y consulta gastos en zonas sin cobertura o con datos agotados |
+| **OB-03** | Tratar la información financiera conforme a la Ley 1581 de 2012 | Usuario final · Equipo de desarrollo | El usuario confía datos sensibles; el equipo responde legalmente por su tratamiento |
+| **OB-04** | Sostener la cobertura de entidades bancarias sin reescribir el sistema cada vez que una cambie el formato de sus mensajes | Equipo de desarrollo | Un formato no soportado deja sin servicio a un segmento de usuarios |
+
 ## Quality Goals 
 
-| # | Objetivo de calidad | Descripción |
-|---|---|---|
-| 1 | Disponibilidad (offline-first) | Leer y escribir datos sin señal; el usuario nunca ve un error de red al registrar un gasto. |
-| 2 | Resiliencia | Si la IA falla o no responde, la app sigue funcionando con normalidad (categoría "Sin Categorizar" temporal). |
-| 3 | Seguridad básica | Proteger la base de datos local contra lecturas no autorizadas (cifrado SQLCipher/AES-256). |
-| 4 | Consistencia eventual | Al reconectar, la Sync Queue sube las transacciones en orden cronológico correcto sin duplicar ni sobrescribir saldos. |
+Cada objetivo de calidad se deriva de un objetivo de negocio y se verifica mediante un escenario de la sección 10.
 
-**Escenarios de calidad medibles:**
+| # | Objetivo de calidad | Descripción | Objetivo de negocio | Escenario |
+|---|---|---|---|---|
+| 1 | Disponibilidad (offline-first) | Leer y escribir datos sin señal; el usuario nunca ve un error de red al registrar un gasto. | OB-02 | ESC-01 |
+| 2 | Resiliencia | Si la IA falla o no responde, la app sigue funcionando con normalidad (categoría "Sin Categorizar" temporal). | OB-01 | ESC-02 |
+| 3 | Seguridad básica | Proteger la base de datos local contra lecturas no autorizadas (cifrado SQLCipher/AES-256). | OB-03 | ESC-04 |
+| 4 | Consistencia eventual | Al reconectar, la Sync Queue sube las transacciones en orden cronológico correcto sin duplicar ni sobrescribir saldos. | OB-02 | ESC-05 |
+| 5 | Modificabilidad | Incorporar el formato de una nueva entidad bancaria sin modificar el código de las ya soportadas. | OB-04 | ESC-03 |
 
-| Escenario | Estímulo | Respuesta medible |
-|---|---|---|
-| Registro offline | Registrar un gasto en modo avión | Se guarda localmente en < 150 ms, sin mensaje de error de red |
-| Fallo de IA | La API de categorización está caída o no responde | Se asigna "Sin Categorizar" en < 200 ms; la app no se cierra ni se congela |
-| Ingesta CSV | Subir un archivo CSV con 100 transacciones | Se procesan y muestran en pantalla en < 2 segundos |
+**Escenarios de calidad medibles:** los escenarios completos, con sus seis partes (fuente, estímulo, artefacto, entorno, respuesta y medida) y sus medidas verificables (umbral, carga y herramienta), se detallan en la sección 10 (Quality Requirements).
 
 **Restricciones clave:**
 - **Presupuesto:** $0 — solo bibliotecas open-source y capas gratuitas de APIs.
@@ -48,12 +56,13 @@ En la gestión financiera personal actual se identifican dos limitaciones estruc
 
 ## Stakeholders 
 
-| Rol | Contacto | Expectativas |
-|---|---|---|
-| Usuario final | Interactúa con la app móvil | Registrar y consultar sus finanzas con mínima fricción, sin depender de señal |
-| Equipo de desarrollo (nosotros) | Diseña, implementa y documenta cada incremento | Entregar una arquitectura clara, documentada y sostenible en un semestre |
-| Docente / Evaluador (UTB) | Revisa el repositorio de GitHub y los entregables incrementales | Verificar que la documentación (arc42) corresponda con el repositorio |
-| Servicio externo de IA (Gemini) | Se consulta vía API; no almacena datos personales del usuario | Recibir solo datos anonimizados (comercio + monto) para categorizar |
+| Rol | Contacto | Expectativas | Objetivo asociado |
+| --- | --- | --- | --- |
+| Usuario final | Interactúa con la app móvil | Registrar y consultar sus finanzas con mínima fricción, sin depender de señal | OB-01 · OB-02 |
+| Usuario final | Interactúa con la app móvil | Que su información financiera no sea legible si pierde el dispositivo | OB-03 |
+| Equipo de desarrollo (nosotros) | Diseña, implementa y documenta cada incremento | Entregar una arquitectura clara, documentada y sostenible en un semestre | OB-04 |
+| Docente / Evaluador (UTB) | Revisa el repositorio de GitHub y los entregables incrementales | Verificar que la documentación (arc42) corresponda con el repositorio | Todos |
+| Servicio externo de IA (Gemini) | Se consulta vía API; no almacena datos personales del usuario | Recibir solo datos anonimizados (comercio + monto) para categorizar | OB-03 |
 
 # Architecture Constraints
 
@@ -62,6 +71,7 @@ Estas son las condiciones que ya vienen dadas para el proyecto y que no podemos 
 ## Restricciones Técnicas:
 
 - **RT-01 (Exclusividad de Sistema Operativo):** La app se va a desarrollar solo para Android. La razón es que leer los SMS automáticamente en segundo plano (usando BroadcastReceiver y el permiso RECEIVE_SMS) es algo que solo se puede hacer de esa forma en Android; otros sistemas móviles no dejan que una app lea mensajes de texto así por sus políticas de seguridad. *(Origen: limitación técnica de la plataforma)*
+
 - **RT-02 (Arquitectura Offline-First):** La información se guarda primero de forma local, en una base de datos SQLite con cifrado (Cipher). Leer y escribir datos no depende de tener internet. *(Origen: decisión de arquitectura del equipo, a partir del problema de conectividad intermitente)*
 
 - **RT-03 (Seguridad de Datos Locales):** La base de datos local se cifra con AES-256, y las llaves que la protegen se manejan a través del Android Keystore. *(Origen: buena práctica de seguridad para el manejo de datos financieros sensibles)*
@@ -92,13 +102,13 @@ Aquí se muestra quién o qué interactúa con XALD desde afuera, sin entrar en 
 | **SO Android / Entidades Bancarias (SMS)** | Sistema operativo que entrega las notificaciones/SMS emitidos por las entidades bancarias | Mensaje de texto (SMS) con monto, comercio y fecha | *Ninguna — el conector es unidireccional (ver C1): XALD solo escucha, no le responde nada al SO ni al banco* |
 | **Google Gemini API** | API de IA externa para la inferencia de categorías de gasto | Categoría sugerida en formato JSON | Cadena de texto limpia del comercio / origen |
 
-**Nota de alcance:** el Backend XALD (servidor de sincronización) **no aparece como actor externo**, porque en el modelo C4 se considera parte interna del sistema XALD, igual que la base de datos local — así es como está representado en el diagrama de Contexto (C1). Su rol de sincronización y almacenamiento remoto se documenta en el nivel de Contenedores (C2), no en el Contexto de negocio.
+**Nota de alcance:** el Backend XALD (servidor de sincronización) **no aparece como actor externo**, porque forma parte interna del sistema XALD, igual que la base de datos local. En el diagrama de Contexto (`docs/c4/c4.md`) se representa **dentro del recuadro del sistema XALD**, no como sistema externo. Su rol de sincronización y almacenamiento remoto se detalla en el nivel de Contenedores (C2).
 
 La idea central es que el usuario casi no tiene que hacer nada manualmente: el sistema capta la información sola desde los SMS bancarios, usa la IA de Gemini para sugerir la categoría del gasto, y el usuario solo interviene para revisar, corregir o consultar.
 
 ## Technical Context
 
-Acá se muestra por dónde entra y sale la información, y cómo viaja de un lado a otro. Se agregó una columna de **Alcance** para dejar explícito cuáles interfaces cruzan la frontera del sistema (Externo, y por tanto sí aparecen en el C4 de Contexto) y cuáles ocurren dentro de XALD entre sus propios contenedores (Interno, documentadas a nivel de Contenedores/C2).
+Acá se muestra por dónde entra y sale la información, y cómo viaja de un lado a otro. Se agregó una columna de **Alcance** para dejar explícito cuáles interfaces cruzan la frontera del sistema (Externo, y por tanto sí aparecen como conectores hacia afuera en el C4 de Contexto) y cuáles ocurren dentro de XALD entre sus propios contenedores (Interno, documentadas a nivel de Contenedores/C2).
 
 | Interfaz Técnica | Alcance | Canal / Protocolo | Formato de Datos | Cifrado / Seguridad |
 | --- | --- | --- | --- | --- |
@@ -107,7 +117,7 @@ Acá se muestra por dónde entra y sale la información, y cómo viaja de un lad
 | App XALD → DB Local | Interno | Llamada interna SQLite / Room | Objetos Relacionales / Filas | AES-256 vía Android Keystore |
 | App XALD → Backend XALD | Interno | HTTPS / REST (POST/PUT) | Lotes JSON (Sync Queue) | TLS 1.3 + Tokens de Sesión |
 
-Este diagrama de texto es la base para el C4 de contexto formal (con las cajas y flechas gráficas): las interfaces marcadas como **Externo** son las que efectivamente aparecen como conectores en el diagrama C1, mientras que las marcadas como **Interno** quedan dentro de la frontera del sistema XALD.
+El diagrama de contexto formal se encuentra en `docs/c4/c4.md`. Las interfaces marcadas como **Externo** aparecen allí como conectores que cruzan la frontera del sistema, mientras que las marcadas como **Interno** ocurren entre contenedores situados dentro de la frontera de XALD — es el caso del Backend XALD, que en el diagrama se representa dentro del recuadro del sistema, en coherencia con la nota de alcance del Business Context.
 
 **INPUT/OUTPUT MAP**
 
@@ -133,19 +143,18 @@ Este diagrama de texto es la base para el C4 de contexto formal (con las cajas y
 
 # Solution Strategy 
 
-
 Ideas principales y enfoques de solución que definen cómo XALD resuelve el problema. Las herramientas que se mencionan más adelante son solo ejemplos de cómo se podría implementar cada idea, no una decisión cerrada; se pueden cambiar según lo que mejor funcione en el momento.
 
-* **Para cumplir con las metas de calidad:** La app realiza una captura pasiva e ingesta automática leyendo mensajes o notificaciones del banco mediante receptores nativos (`BroadcastReceiver` / `SMS`) y soporte para archivos CSV. La IA actúa como un soporte extra no bloqueante: si falla o no hay red, la transacción se guarda como *“Sin Categorizar”*. Además, las transacciones conocidas se procesan rápido localmente con expresiones regulares (`Regex`) para ahorrar batería y reducir costos, reservando la IA solo para casos ambiguos.
+* **Para cumplir con las metas de calidad:** La app realiza una captura pasiva e ingesta automática leyendo mensajes o notificaciones del banco mediante receptores nativos (`BroadcastReceiver` / `SMS`) y soporte para archivos CSV. La IA actúa como un soporte extra no bloqueante: si falla o no hay red, la transacción se guarda como *"Sin Categorizar"*. Además, las transacciones conocidas se procesan rápido localmente con expresiones regulares (`Regex`) para ahorrar batería y reducir costos, reservando la IA solo para casos ambiguos.
 
 * **En cuanto al patrón de arquitectura:** Se adopta un enfoque *offline-first* donde toda la información se almacena primero en el dispositivo (mediante `SQLite`/`Room`) para garantizar disponibilidad total sin internet. La sincronización con el servidor se realiza de forma asíncrona mediante una cola local (*Sync Queue*) basada en marcas de tiempo (`timestamps`) e identificadores únicos (`UUIDs`), resolviendo conflictos en el backend mediante *Last-Write-Wins* (LWW) sin bloquear la interfaz.
 
 * **Entre las decisiones tecnológicas principales:** Se aprovechan las herramientas nativas del sistema operativo (permisos `RECEIVE_SMS` / `SmsRetriever`) ante la falta de APIs de *Open Banking* locales. Para mantener el presupuesto en **$0** y cumplir el plazo de **16 semanas**, se combina un motor local `Regex` con llamadas HTTP REST a la API de Google Gemini (vía respuestas JSON) y el uso de librerías de código abierto.
-  
-* * **Para estrategias de seguridad:** Se aplica *Privacidad desde el Diseño*: hacia el servicio de IA solo se envían el nombre del comercio y el monto —omitiendo cédula, saldos o número de cuenta— para cumplir con la **Ley 1581 (Habeas Data)**. Asimismo, la información financiera almacenada en el dispositivo se protege con cifrado (`AES-256` / `Android KeyStore`) para salvaguardar los datos ante robo o acceso no autorizado.
 
+* **Para estrategias de seguridad:** Se aplica *Privacidad desde el Diseño*: hacia el servicio de IA solo se envían el nombre del comercio y el monto —omitiendo cédula, saldos o número de cuenta— para cumplir con la **Ley 1581 (Habeas Data)**. Asimismo, la información financiera almacenada en el dispositivo se protege con cifrado (`AES-256` / `Android KeyStore`) para salvaguardar los datos ante robo o acceso no autorizado.
 
 # Building Block View
+
 La vista de bloques de construcción muestra la descomposición del sistema XALD en sus componentes principales, desde una perspectiva de caja blanca (Nivel 1) hasta el detalle interno del bloque de la App Móvil (Nivel 2).
 
 | Bloque | Responsabilidad |
@@ -158,7 +167,6 @@ La vista de bloques de construcción muestra la descomposición del sistema XALD
 
 Vista de caja blanca del sistema completo: la **App Móvil Android** captura y gestiona la información financiera del usuario, mientras el **Backend XALD** la procesa y sincroniza.
 
-
 | 1. App Móvil Android | 2. Backend XALD |
 | :--- | :--- |
 | • Ingesta de Notificaciones | • Servidor API REST |
@@ -167,14 +175,14 @@ Vista de caja blanca del sistema completo: la **App Móvil Android** captura y g
 | • UI / Gestión Financiera | • Base de Datos Remota |
 
 1. **App Móvil Android:** Captura, procesa y presenta la información financiera del usuario de forma local, incluyendo la ingesta de notificaciones bancarias, el parseo con expresiones regulares, el almacenamiento cifrado y la interfaz de gestión financiera.
-   
+
 2. **Backend XALD:** Expone la API REST, procesa reportes y ejecuta la sincronización de datos entre dispositivos mediante el motor *Last-Write-Wins* (LWW), manteniendo la base de datos remota como respaldo consolidado.
 
 ---
 
 ### 5.2 Nivel 2 — App Móvil Android
 
-Descomposición del bloque **“App Móvil Android”** en sus cuatro módulos internos y el flujo de datos entre ellos.
+Descomposición del bloque **"App Móvil Android"** en sus cuatro módulos internos y el flujo de datos entre ellos.
 
 | Módulo | Función / Componente Interno |
 | :--- | :--- |
@@ -187,46 +195,35 @@ Descomposición del bloque **“App Móvil Android”** en sus cuatro módulos i
 | **1.4 UI & Dashboard** | Presentación / Reportes |
 
 * **1.1 Ingestion Module (`BroadcastReceiver` / `SMS`):** Captura de forma pasiva los mensajes y notificaciones bancarias entrantes en el dispositivo, sin intervención del usuario.
-  
+
 * **1.2 Processing & Parser Module (`Regex Engine` + `Gemini API Client`):** Interpreta el texto capturado usando expresiones regulares para los casos conocidos y, cuando el resultado es ambiguo, recurre a la API de Gemini como soporte adicional.
-  
+
 * **1.3 Data & Sync Module (`SQLite`/`Room AES-256` + `Sync Queue`):** Almacena las transacciones de forma cifrada en el dispositivo y gestiona la cola de sincronización asíncrona con el backend.
-* ### Escenario 1: Captura, Parsing e Inferencia Automática de SMS (Módulo A-01)
+
+* **1.4 UI & Dashboard:** Presenta el saldo, el historial de transacciones y los reportes de gasto, y permite al usuario corregir categorías o registrar movimientos manualmente.
+
+# Runtime View
+
+### Escenario 1: Captura, Parsing e Inferencia Automática de SMS (Módulo A-01)
 
 Este escenario describe el flujo desde que el celular recibe una notificación bancaria hasta que la transacción queda guardada localmente.
 
-1. *Recepción del Evento:* El Sistema Operativo Android recibe un SMS del banco y activa el BroadcastReceiver del *Ingestion Module*.
+1. **Recepción del Evento:** El Sistema Operativo Android recibe un SMS del banco y activa el BroadcastReceiver del *Ingestion Module*.
 
+2. **Filtrado:** El *Ingestion Module* valida el remitente y extrae el texto plano.
 
-2. *Filtrado:* El *Ingestion Module* valida el remitente y extrae el texto plano.
+3. **Parsing Local (Regex):** El *Processing & Parser Module* evalúa el texto con expresiones regulares.
 
+   * Caso A (Regex exitoso): Si reconoce el comercio y monto, genera el objeto Transaction.
+   * Caso B (Comercio ambiguo): Envía el texto a la *Gemini API* vía HTTPS con un prompt estructurado en JSON para extraer la categoría y comercio limpio.
 
-3. *Parsing Local (Regex):* El *Processing & Parser Module* evalúa el texto con expresiones regulares.
+4. **Persistencia Local:** El objeto Transaction se envía al *Data & Sync Module*, el cual:
 
+   * Cifra los campos con *AES-256*.
+   * Guarda la fila en la DB local (SQLite).
+   * Agrega el registro a la cola de sincronización (Sync Queue) con su UUID y timestamp.
 
-* Caso A (Regex exitoso): Si reconoce el comercio y monto, genera el objeto Transaction.
-
-
-* Caso B (Comercio ambiguo): Envía el texto a la *Gemini API* vía HTTPS con un prompt estructurado en JSON para extraer la categoría y comercio limpio.
-
-
-
-
-4. *Persistencia Local:* El objeto Transaction se envía al *Data & Sync Module*, el cual:
-* Cifra los campos con *AES-256*.
-
-
-* Guarda la fila en la DB local (SQLite).
-
-
-* Agrega el registro a la cola de sincronización (Sync Queue) con su UUID y timestamp.
-
-
-
-
-5. *Notificación a la UI:* El *UI & Dashboard* detecta el cambio en la base de datos y actualiza el saldo y reporte en pantalla.
-
-
+5. **Notificación a la UI:** El *UI & Dashboard* detecta el cambio en la base de datos y actualiza el saldo y reporte en pantalla.
 
 ---
 
@@ -234,20 +231,15 @@ Este escenario describe el flujo desde que el celular recibe una notificación b
 
 Este escenario describe cómo se respaldan las transacciones generadas en modo offline cuando el dispositivo recupera la conexión a internet.
 
-1. *Detección de Red:* El *Data & Sync Module* detecta que hay conexión a internet activa.
+1. **Detección de Red:** El *Data & Sync Module* detecta que hay conexión a internet activa.
 
+2. **Lectura de Cola:** Lee los lotes pendientes de la tabla Sync Queue local.
 
-2. *Lectura de Cola:* Lee los lotes pendientes de la tabla Sync Queue local.
+3. **Envío HTTPS:** Realiza una petición POST /api/v1/sync al *Backend XALD* enviando el lote JSON.
 
+4. **Resolución LWW:** El *Backend XALD* procesa los registros. Si hay un conflicto de edición entre el servidor y el cliente, aplica la regla Last-Write-Wins evaluando la marca de tiempo (timestamp).
 
-3. *Envío HTTPS:* Realiza una petición POST /api/v1/sync al *Backend XALD* enviando el lote JSON.
-
-
-4. *Resolución LWW:* El *Backend XALD* procesa los registros. Si hay un conflicto de edición entre el servidor y el cliente, aplica la regla Last-Write-Wins evaluando la marca de tiempo (timestamp).
-
-
-5. *Confirmación y Limpieza:* El *Backend XALD* responde con un código de éxito. El *Data & Sync Module* elimina los ítems sincronizados de la Sync Queue local.
-
+5. **Confirmación y Limpieza:** El *Backend XALD* responde con un código de éxito. El *Data & Sync Module* elimina los ítems sincronizados de la Sync Queue local.
 
 # Deployment View {#section-deployment-view}
 
@@ -301,76 +293,78 @@ Mapping of Building Blocks to Infrastructure
 
 # Architecture Decisions {#section-design-decisions}
 
+Las decisiones arquitectónicas del proyecto se registran como ADR individuales en `docs/adr/`. Cada decisión responde a un objetivo de calidad de la sección 1 y se verifica mediante el escenario correspondiente de la sección 10.
+
 # Quality Requirements {#section-quality-scenarios}
 
 ## Quality Scenarios {#_quality_scenarios}
 
 Cada escenario sigue las seis partes que exige arc42: fuente, estímulo, artefacto, entorno, respuesta y medida de respuesta. Cada medida declara explícitamente su umbral, la carga bajo la cual se evalúa y la herramienta de verificación.
 
-### ESC-01 · Registro de transacción sin conexión {#esc-01}
+### ESC-01 · Registro de transacción sin conexión
 
 | Parte | Contenido |
 |---|---|
 | **Fuente** | Entidad bancaria (mensaje SMS) |
 | **Estímulo** | Llega una notificación de transacción al dispositivo |
-| **Artefacto** | Módulo de captura y módulo de persistencia local |
+| **Artefacto** | Ingestion Module y Data & Sync Module |
 | **Entorno** | Operación normal, dispositivo en modo avión (sin conexión) |
 | **Respuesta** | El sistema extrae los datos, registra la transacción en el almacenamiento local cifrado y la marca como pendiente de sincronizar |
 | **Medida** | **Umbral:** ≤ 2 s desde la recepción del SMS hasta la persistencia confirmada · **Carga:** 20 SMS consecutivos con 1 s de separación · **Herramienta:** prueba instrumentada con `adb shell am broadcast` y medición por *timestamp* en el log |
 
-**Atributo:** Disponibilidad · **Objetivo:** OB-02 · **Restricción:** RT-02
+**Objetivo de calidad:** 1 (Disponibilidad) · **Objetivo de negocio:** OB-02 · **Restricción:** RT-02
 
-### ESC-02 · Indisponibilidad del servicio de categorización {#esc-02}
+### ESC-02 · Indisponibilidad del servicio de categorización
 
 | Parte | Contenido |
 |---|---|
-| **Fuente** | Servicio externo de categorización |
+| **Fuente** | Google Gemini API (servicio externo de categorización) |
 | **Estímulo** | La petición falla o excede el tiempo de espera |
-| **Artefacto** | Módulo de categorización |
+| **Artefacto** | Processing & Parser Module (Gemini API Client) |
 | **Entorno** | Con conexión disponible, servicio externo degradado o caído |
-| **Respuesta** | La transacción ya registrada se conserva, se marca como `SIN_CLASIFICAR` y queda disponible para categorización manual |
+| **Respuesta** | La transacción ya registrada se conserva, se marca como "Sin Categorizar" y se reclasifica automáticamente cuando el servicio vuelve a responder |
 | **Medida** | **Umbral:** 0 transacciones perdidas; corte a los 5 s; máximo 3 reintentos con espera creciente · **Carga:** 50 transacciones con el servicio simulado como no disponible · **Herramienta:** servidor simulado (*mock*) que devuelve error 503, verificación por conteo en base de datos |
 
-**Atributo:** Tolerancia a fallos · **Objetivo:** OB-01 · **Restricción:** RT-04
+**Objetivo de calidad:** 2 (Resiliencia) · **Objetivo de negocio:** OB-01 · **Restricción:** RO-02
 
-### ESC-03 · Incorporación de una nueva entidad bancaria {#esc-03}
+### ESC-03 · Incorporación de una nueva entidad bancaria
 
 | Parte | Contenido |
 |---|---|
 | **Fuente** | Equipo de desarrollo |
-| **Estímulo** | Se requiere soportar el formato de una entidad no contemplada |
-| **Artefacto** | Módulo de captura (estrategias de lectura) |
+| **Estímulo** | Una entidad bancaria cambia el formato de sus mensajes o se requiere soportar una entidad no contemplada |
+| **Artefacto** | Processing & Parser Module (Regex Engine) |
 | **Entorno** | Tiempo de desarrollo |
-| **Respuesta** | Se agrega una estrategia nueva sin modificar el código de las entidades ya soportadas |
-| **Medida** | **Umbral:** 1 archivo nuevo y 0 modificaciones fuera del registro de estrategias; esfuerzo ≤ 4 h · **Carga:** incorporación de una entidad real no soportada · **Herramienta:** `git diff --stat` sobre el *commit* de la incorporación |
+| **Respuesta** | Se agrega una regla de lectura nueva sin modificar el código de las entidades ya soportadas |
+| **Medida** | **Umbral:** 1 archivo nuevo y 0 modificaciones fuera del registro de reglas; esfuerzo ≤ 4 h · **Carga:** incorporación de una entidad real no soportada · **Herramienta:** `git diff --stat` sobre el *commit* de la incorporación |
 
-**Atributo:** Modificabilidad · **Objetivo:** OB-04 · **Restricción:** RT-01
+**Objetivo de calidad:** 5 (Modificabilidad) · **Objetivo de negocio:** OB-04 · **Restricción:** RT-04
 
-### ESC-04 · Protección de la información almacenada {#esc-04}
+### ESC-04 · Protección de la información almacenada
 
 | Parte | Contenido |
 |---|---|
 | **Fuente** | Atacante con acceso físico al dispositivo |
 | **Estímulo** | Intento de lectura directa del archivo de base de datos |
-| **Artefacto** | Módulo de persistencia local |
+| **Artefacto** | Data & Sync Module (SQLite/Room con AES-256) |
 | **Entorno** | Dispositivo perdido, robado o comprometido |
-| **Respuesta** | El contenido resulta ilegible sin la clave, resguardada en el almacén seguro del sistema operativo |
+| **Respuesta** | El contenido resulta ilegible sin la clave, resguardada en el Android Keystore |
 | **Medida** | **Umbral:** 0 campos financieros legibles en texto plano · **Carga:** base de datos con 500 transacciones · **Herramienta:** extracción del archivo con `adb pull` e inspección con `strings` y `sqlite3` |
 
-**Atributo:** Seguridad · **Objetivo:** OB-03 · **Restricciones:** RT-03 y RL-01
+**Objetivo de calidad:** 3 (Seguridad básica) · **Objetivo de negocio:** OB-03 · **Restricciones:** RT-03 y RL-01
 
-### ESC-05 · Resolución de conflictos al sincronizar {#esc-05}
+### ESC-05 · Resolución de conflictos al sincronizar
 
 | Parte | Contenido |
 |---|---|
 | **Fuente** | Usuario con la aplicación en más de un dispositivo |
 | **Estímulo** | La misma transacción se modifica en dos dispositivos mientras ambos están sin conexión |
-| **Artefacto** | Módulo de sincronización |
+| **Artefacto** | Data & Sync Module (Sync Queue) y Backend XALD (motor LWW) |
 | **Entorno** | Restablecimiento de la conexión en ambos dispositivos |
-| **Respuesta** | Se aplica la política de última escritura tomando la marca temporal más reciente |
+| **Respuesta** | Se aplica la política Last-Write-Wins tomando la marca de tiempo más reciente, sin duplicar ni sobrescribir saldos |
 | **Medida** | **Umbral:** 100 % de conflictos resueltos automáticamente, 0 transacciones distintas perdidas · **Carga:** 30 transacciones en conflicto simultáneo · **Herramienta:** dos emuladores con relojes sincronizados, verificación por comparación de estado final contra el esperado |
 
-**Atributo:** Consistencia · **Objetivo:** OB-02 · **Restricción:** RT-05
+**Objetivo de calidad:** 4 (Consistencia eventual) · **Objetivo de negocio:** OB-02 · **Restricción:** RT-05
 
 ## Árbol de utilidad {#_quality_requirements_overview}
 
@@ -383,7 +377,7 @@ Utilidad del sistema XALD
 │   └── ESC-01 · Registro sin conexión ......................... (A, A)
 │         Propuesta de valor central; su fallo invalida el producto.
 │
-├── TOLERANCIA A FALLOS
+├── RESILIENCIA
 │   └── ESC-02 · Fallo del servicio de categorización .......... (A, M)
 │         Perder una transacción rompe la confianza;
 │         la mitigación es conocida y de bajo costo.
@@ -393,7 +387,7 @@ Utilidad del sistema XALD
 │         Obligación legal (RL-01); el riesgo baja al usar
 │         mecanismos estándar de la plataforma.
 │
-├── CONSISTENCIA
+├── CONSISTENCIA EVENTUAL
 │   └── ESC-05 · Conflictos al sincronizar ..................... (M, A)
 │         Riesgo alto por la complejidad; impacto medio
 │         porque solo afecta a usuarios multidispositivo.
