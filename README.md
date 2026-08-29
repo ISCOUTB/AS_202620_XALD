@@ -38,6 +38,8 @@ XALDAPP\gradlew.bat -p XALDAPP test
 ## Salida Esperada en Consola
 
 Al ejecutar cualquiera de los comandos anteriores, la suite de pruebas unitarias validará el entorno. El resultado exitoso debe verse así:
+<img width="1105" height="284" alt="Captura de pantalla 2026-08-23 202449" src="https://github.com/user-attachments/assets/58f7b82c-684e-4f23-a2b8-c4c95890dc4a" />
+
 
 ```plaintext
 Reusing configuration cache.
