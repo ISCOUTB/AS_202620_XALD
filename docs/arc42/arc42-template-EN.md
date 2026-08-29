@@ -291,7 +291,8 @@ Mapping of Building Blocks to Infrastructure
 
 *\<explanation\>*
 
-# Architecture Decisions {#section-design-decisions}
+# Architecture Decisions 
+
 Las decisiones arquitectónicas del proyecto se registran como ADR (Architecture Decision Record) individuales en `docs/adr/`, siguiendo la convención de nombre `NNNN-titulo-en-kebab-case.md`. Cada decisión responde a un objetivo de negocio o de calidad de la Sección 1, y varias se verifican mediante los escenarios de calidad de la Sección 10.
 
 | ID | Título | Decisión | Relacionado con |
@@ -411,7 +412,7 @@ Los escenarios calificados **(A, A)** y **(A, M)** son los que condicionan las d
 
 # Risks and Technical Debts {#section-technical-risks}
 
-# Glossary {#section-glossary}
+# Glossary 
 
 | Term | Definition |
 | --- | --- |
