@@ -102,9 +102,10 @@ Aquí se muestra quién o qué interactúa con XALD desde afuera, sin entrar en 
 | **SO Android / Entidades Bancarias (SMS)** | Sistema operativo que entrega las notificaciones/SMS emitidos por las entidades bancarias | Mensaje de texto (SMS) con monto, comercio y fecha | *Ninguna — el conector es unidireccional (ver C1): XALD solo escucha, no le responde nada al SO ni al banco* |
 | **Google Gemini API** | API de IA externa para la inferencia de categorías de gasto | Categoría sugerida en formato JSON | Cadena de texto limpia del comercio / origen |
 
-**Nota de alcance:** el Backend XALD (servidor de sincronización) **no aparece como actor externo**, porque forma parte interna del sistema XALD, igual que la base de datos local. En el diagrama de Contexto (`docs/c4/c4.md`) se representa **dentro del recuadro del sistema XALD**, no como sistema externo. Su rol de sincronización y almacenamiento remoto se detalla en el nivel de Contenedores (C2).
+**Nota de alcance:** el Backend XALD se representa **dentro de la frontera del sistema XALD** (subgrafo "Sistema XALD · Frontera del proyecto" en el C1), no como actor externo — por eso no tiene fila propia en la tabla de arriba. Con la actualización del diagrama, la conexión entre la Aplicación XALD y el Backend XALD ya aparece explícita dentro del propio C1 como el **conector 4 (Sincronización REST)**, aunque su función interna se sigue detallando a fondo en el nivel de Contenedores (C2). Ver `docs/c4/c4.md`.
 
 La idea central es que el usuario casi no tiene que hacer nada manualmente: el sistema capta la información sola desde los SMS bancarios, usa la IA de Gemini para sugerir la categoría del gasto, y el usuario solo interviene para revisar, corregir o consultar.
+
 
 ## Technical Context
 
