@@ -117,7 +117,7 @@ Acá se muestra por dónde entra y sale la información, y cómo viaja de un lad
 | App XALD → DB Local | Interno | Llamada interna SQLite / Room | Objetos Relacionales / Filas | AES-256 vía Android Keystore |
 | App XALD → Backend XALD | Interno | HTTPS / REST (POST/PUT) | Lotes JSON (Sync Queue) | TLS 1.3 + Tokens de Sesión |
 
-El diagrama de contexto formal se encuentra en `docs/c4/c4.md`. Las interfaces marcadas como **Externo** aparecen allí como conectores que cruzan la frontera del sistema, mientras que las marcadas como **Interno** ocurren entre contenedores situados dentro de la frontera de XALD — es el caso del Backend XALD, que en el diagrama se representa dentro del recuadro del sistema, en coherencia con la nota de alcance del Business Context.
+El diagrama de contexto formal se encuentra en `docs/c4/c4.md`. Las interfaces marcadas como **Externo** aparecen allí como conectores que cruzan la frontera del sistema (C1). Las marcadas como **Entre Contenedores** cruzan red pero permanecen dentro de la frontera de XALD — es el caso del Backend XALD, representado dentro del recuadro del sistema, en coherencia con la nota de alcance del Business Context — y se documentan a nivel de Contenedores (C2). Las marcadas como **Interno** son llamadas en el mismo proceso, sin cruzar red.
 
 **INPUT/OUTPUT MAP**
 
