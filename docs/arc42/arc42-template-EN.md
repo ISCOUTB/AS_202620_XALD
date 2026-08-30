@@ -222,7 +222,7 @@ Esta sección muestra, para cada uno de los 5 escenarios de calidad definidos en
 
 >  ** Sugerencia , Nota:** el mecanismo exacto de notificación a la UI (`StateFlow`, `LiveData`, u otro) no estaba especificado en el repositorio — propongo `StateFlow` por ser el estándar actual en Android/Kotlin, pero confírmenlo con quien programe el módulo de UI para que el diagrama sea 100% fiel al código.
 
-\`\`\`mermaid
+```mermaid
 sequenceDiagram
     participant SO as Sistema Operativo (Android)
     participant ING as Ingestion Module
@@ -245,7 +245,7 @@ sequenceDiagram
     DAT->>DAT: Cifra AES-256, guarda en SQLite,<br/>agrega a Sync Queue (UUID + timestamp)
     DAT-->>UI: Emite nuevo estado (StateFlow)
     UI->>UI: Actualiza saldo y reportes en pantalla
-\`\`\`
+```
 
 **Aspectos notables:** la IA nunca bloquea el flujo — solo interviene en el Caso B, y aun así el resultado se integra al mismo camino de persistencia que el Caso A. Esto es lo que le da a XALD su característica de captura rápida y no bloqueante.
 
@@ -265,7 +265,7 @@ sequenceDiagram
 
 >  **Sugerencia , Nota:** el mecanismo de reintento con espera creciente y el *worker* de reclasificación periódica son una propuesta técnica razonable, construida a partir de la medida que ya está definida en ESC-02 (Sección 10) — no están confirmados en el código real. Validen con quien programe el Processing & Parser Module si el mecanismo real usa `WorkManager`, un temporizador simple, o algo distinto.
 
-\`\`\`mermaid
+```mermaid
 sequenceDiagram
     participant PAR as Processing & Parser Module
     participant GEM as Google Gemini API
@@ -291,7 +291,7 @@ sequenceDiagram
     WM->>GEM: Reintenta categorización
     GEM-->>WM: Categoría sugerida (JSON)
     WM->>DAT: Actualiza la transacción con la categoría real
-\`\`\`
+```
 
 **Aspectos notables:** el diseño garantiza el umbral de "0 transacciones perdidas" de ESC-01 porque el registro nunca depende de que la IA responda — la categorización es un enriquecimiento posterior, no un requisito para guardar el gasto.
 
@@ -309,7 +309,7 @@ sequenceDiagram
 4. El Backend XALD detecta que ya existe un registro previo para esa transacción y aplica **Last-Write-Wins (LWW)**: compara los timestamps y conserva la versión más reciente.
 5. El dispositivo cuya versión no ganó actualiza su copia local con la versión vencedora, para que ambos dispositivos queden consistentes.
 
-\`\`\`mermaid
+```mermaid
 sequenceDiagram
     participant D1 as Dispositivo A (Data & Sync Module)
     participant D2 as Dispositivo B (Data & Sync Module)
@@ -332,7 +332,7 @@ sequenceDiagram
     end
     BK-->>D2: Confirmación (con la versión vencedora)
     D2->>D2: Actualiza su copia local con la versión vencedora
-\`\`\`
+```
 
 **Aspectos notables:** este es el escenario de mayor riesgo técnico del árbol de utilidad (Riesgo: Alta), porque depende de que los relojes de ambos dispositivos sean razonablemente confiables para que LWW elija correctamente.
 
@@ -350,7 +350,7 @@ sequenceDiagram
 4. Se despliega la nueva versión del Processing & Parser Module.
 5. A partir de ese momento, el módulo reconoce el nuevo formato sin afectar el comportamiento de los bancos existentes.
 
-\`\`\`mermaid
+```mermaid
 sequenceDiagram
     participant DEV as Equipo de desarrollo
     participant REG as Registro de reglas (Regex Engine)
@@ -363,7 +363,7 @@ sequenceDiagram
     GIT-->>DEV: git diff --stat confirma 0 cambios<br/>fuera del registro de reglas
     DEV->>PAR: Despliega la nueva versión
     Note over PAR: Reconoce el nuevo formato sin afectar<br/>las entidades ya soportadas
-\`\`\`
+```
 
 **Aspectos notables:** este escenario es el que justifica directamente la decisión del ADR-0002 (Parsing Híbrido) — la separación en un registro de reglas es lo que hace posible este bajo esfuerzo de modificación (≤ 4 h, según la medida de ESC-03).
 
@@ -381,7 +381,7 @@ sequenceDiagram
 4. El atacante intentaría obtener la llave de cifrado, pero esta vive en el Android Keystore, protegida por el hardware/cuenta del dispositivo y nunca se guarda junto a los datos.
 5. Sin la llave, el 0% de los campos financieros es legible en texto plano.
 
-\`\`\`mermaid
+```mermaid
 sequenceDiagram
     participant ATK as Atacante (acceso físico)
     participant FS as Sistema de archivos del dispositivo
@@ -394,7 +394,7 @@ sequenceDiagram
     ATK->>KS: Intenta obtener la llave de cifrado
     KS-->>ATK: Acceso denegado (llave protegida por el sistema)
     Note over ATK,DB: Sin la llave, 0% de los campos<br/>financieros es legible en texto plano
-\`\`\`
+```
 
 **Aspectos notables:** este escenario verifica directamente la restricción RL-01 (Habeas Data) y RT-03 — la seguridad no depende de ocultar el archivo, sino de que sea inútil sin la llave, que es la práctica correcta de cifrado en reposo.
 
@@ -454,12 +454,12 @@ Las decisiones arquitectónicas del proyecto se registran como ADR (Architecture
 
 | ID | Título | Decisión | Relacionado con |
 | --- | --- | --- | --- |
-| [ADR-0001](docs/adr/0001-patron-offline-first.md) | Adopción de Patrón de Arquitectura Offline-First | Persistencia primero en base de datos local cifrada (SQLite/Room); los datos se envían al backend de forma asíncrona mediante una cola de sincronización cuando hay red. | Objetivo de calidad 1 (Disponibilidad) · RT-02 · ESC-01 |
-| [ADR-0002](docs/adr/0002-parsing-hibrido.md) | Estrategia de Parsing Híbrido (Regex + librerías open source) | Usar un receptor de eventos local (RECEIVE_SMS) con un motor de expresiones regulares, en vez de una API bancaria oficial o un modelo de IA completo. | Objetivo de calidad 5 (Modificabilidad) · RT-04 · RO-02 · ESC-03 |
-| [ADR-0003](docs/adr/0003-restriccion-os.md) | Restricción de Plataforma a Android y Exclusión de iOS | Limitar el cliente exclusivamente al ecosistema Android, usando BroadcastReceiver con el permiso RECEIVE_SMS. | Objetivo de negocio OB-01 · RT-01 |
-| [ADR-0004](docs/adr/0004-seguridad-y-cifrado.md) | Modelo de Seguridad Acotado y Cifrado de Datos | Enfocar la seguridad en dos capas: cifrado local en reposo (AES-256 vía Android Keystore) y cifrado en tránsito (HTTPS/TLS). | Objetivo de calidad 3 (Seguridad básica) · RT-03 · RL-01 · ESC-04 |
-| [ADR-0005](docs/adr/0005-reduccion-de-funcionalidades.md) | Alcance Reducido en el Módulo de Analítica y Reportes (MVP) | Reducir el módulo de reportes a lo esencial (saldos consolidados, gráficos básicos, lista de movimientos), dejando fuera el motor avanzado de analítica y predicción. | RO-01 |
-| [ADR-0006](docs/adr/0006-seleccion-de-estilo-arquitectonico.md) | Selección de Estilo Arquitectónico — Monolito Modular | Adoptar un monolito modular organizado por paquetes de dominio (`parser`, `corefinanciero`, `syncqueue`, `aigemini`), en vez de arquitectura por capas o hexagonal. | RO-01 · Objetivo de calidad 5 (Modificabilidad) |
+| [ADR-0001](../adr/0001-patron-offline-first.md) | Adopción de Patrón de Arquitectura Offline-First | Persistencia primero en base de datos local cifrada (SQLite/Room); los datos se envían al backend de forma asíncrona mediante una cola de sincronización cuando hay red. | Objetivo de calidad 1 (Disponibilidad) · RT-02 · ESC-01 |
+| [ADR-0002](../adr/0002-parsing-hibrido.md) | Estrategia de Parsing Híbrido (Regex + librerías open source) | Usar un receptor de eventos local (RECEIVE_SMS) con un motor de expresiones regulares, en vez de una API bancaria oficial o un modelo de IA completo. | Objetivo de calidad 5 (Modificabilidad) · RT-04 · RO-02 · ESC-03 |
+| [ADR-0003](../adr/0003-restriccion-os.md) | Restricción de Plataforma a Android y Exclusión de iOS | Limitar el cliente exclusivamente al ecosistema Android, usando BroadcastReceiver con el permiso RECEIVE_SMS. | Objetivo de negocio OB-01 · RT-01 |
+| [ADR-0004](../adr/0004-seguridad-y-cifrado.md) | Modelo de Seguridad Acotado y Cifrado de Datos | Enfocar la seguridad en dos capas: cifrado local en reposo (AES-256 vía Android Keystore) y cifrado en tránsito (HTTPS/TLS). | Objetivo de calidad 3 (Seguridad básica) · RT-03 · RL-01 · ESC-04 |
+| [ADR-0005](../adr/0005-reduccion-de-funcionalidades.md) | Alcance Reducido en el Módulo de Analítica y Reportes (MVP) | Reducir el módulo de reportes a lo esencial (saldos consolidados, gráficos básicos, lista de movimientos), dejando fuera el motor avanzado de analítica y predicción. | RO-01 |
+| [ADR-0006](../adr/0006-seleccion-de-estilo-arquitectonico.md) | Selección de Estilo Arquitectónico — Monolito Modular | Adoptar un monolito modular organizado por paquetes de dominio (`parser`, `corefinanciero`, `syncqueue`, `aigemini`), en vez de arquitectura por capas o hexagonal. | RO-01 · Objetivo de calidad 5 (Modificabilidad) |
 
 # Quality Requirements {#section-quality-scenarios}
 
