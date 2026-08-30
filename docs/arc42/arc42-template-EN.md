@@ -18,7 +18,7 @@ En la gestión financiera personal actual se identifican dos limitaciones estruc
 
 **Cómo funciona el sistema (flujo de datos):** XALD funciona como una tubería de datos (pipeline) de 4 pasos:
 
-1. **Captura:** vía SMS/notificación bancaria (leída automáticamente en segundo plano) o vía archivo CSV subido por el usuario.
+1. **Captura:** vía SMS/notificación bancaria, leída automáticamente en segundo plano.
 2. **Validación y limpieza:** se extraen fecha, monto y comercio, verificando que los datos sean válidos.
 3. **Categorización inteligente:** el nombre del comercio se envía a una API de IA (Gemini API, capa gratuita) que devuelve la categoría del gasto (ej. "Alimentación").
 4. **Guardado local:** la transacción categorizada se persiste cifrada en el dispositivo (SQLite + SQLCipher, cifrado AES-256), visible al instante aunque no haya internet.
