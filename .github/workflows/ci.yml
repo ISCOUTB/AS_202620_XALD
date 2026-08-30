@@ -1,0 +1,28 @@
+name: Android CI
+
+on:
+  push:
+    branches: [ "experimental", "main" ]
+  pull_request:
+    branches: [ "experimental", "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar entorno Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Dar permisos de ejecución a Gradle Wrapper
+        run: chmod +x gradlew
+
+      - name: Ejecutar pruebas unitarias de los módulos
+        run: ./gradlew testDebugUnitTest
