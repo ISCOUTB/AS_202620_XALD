@@ -219,7 +219,7 @@ Esta sección muestra, para cada uno de los 5 escenarios de calidad definidos en
 5. **Encolado para sincronización:** `:corefinanciero` notifica a `:syncqueue`, que agrega el registro a la cola de sincronización con su UUID y timestamp.
 6. **Notificación a la UI:** `:corefinanciero` notifica el cambio a `:app`, que actualiza el saldo y el reporte en pantalla. *(el mecanismo exacto de notificación — StateFlow, LiveData u otro — está pendiente de confirmar contra la implementación real de `:app`)*.
 
-\`\`\`mermaid
+```mermaid
 sequenceDiagram
     participant SO as Sistema Operativo (Android)
     participant PARSER as :parser
@@ -245,7 +245,7 @@ sequenceDiagram
     CORE->>SYNC: Agrega a la cola (UUID + timestamp)
     CORE-->>APP: Notifica cambio de estado
     APP->>APP: Actualiza saldo y reportes en pantalla
-\`\`\`
+```
 
 **Aspectos notables:** la IA nunca bloquea el flujo — solo interviene en el Caso B, y aun así el resultado se integra al mismo camino de persistencia que el Caso A. Esto es lo que le da a XALD su característica de captura rápida y no bloqueante.
 
@@ -261,7 +261,7 @@ sequenceDiagram
 2. Si no hay respuesta en **5 segundos**, se reintenta con espera creciente (propuesta: ~2 s, luego ~4 s).
 3. Si los 3 intentos fallan, `:aigemini` devuelve a `:parser` que no fue posible categorizar, y la transacción se guarda igual en `:corefinanciero` con la categoría **"Sin Categorizar"** — nunca se bloquea ni se pierde el registro.
 
-\`\`\`mermaid
+```mermaid
 sequenceDiagram
     participant PARSER as :parser
     participant AIGEMINI as :aigemini
@@ -284,7 +284,7 @@ sequenceDiagram
         AIGEMINI-->>PARSER: Categoría sugerida
         PARSER->>CORE: Transaction con categoría real
     end
-\`\`\`
+```
 
 > **Nota — extensión pendiente de implementar:** la reclasificación automática de transacciones "Sin Categorizar" cuando el servicio vuelve a responder requiere un componente (por ejemplo, un `Worker` periódico dentro de `:syncqueue` o `:aigemini`) que **todavía no está instanciado en el código**. Este diagrama solo cubre el flujo de captura inicial; la reclasificación queda pendiente de diseño e implementación, y no se representa aquí como si ya existiera.
 
@@ -304,7 +304,7 @@ sequenceDiagram
 4. El Backend XALD detecta que ya existe un registro previo y aplica **Last-Write-Wins (LWW)**: compara los timestamps y conserva la versión más reciente.
 5. El dispositivo cuya versión no ganó actualiza su copia local con la versión vencedora, para que ambos dispositivos queden consistentes.
 
-\`\`\`mermaid
+```mermaid
 sequenceDiagram
     participant D1 as Dispositivo A (:syncqueue)
     participant D2 as Dispositivo B (:syncqueue)
@@ -327,7 +327,7 @@ sequenceDiagram
     end
     BK-->>D2: Confirmación (con la versión vencedora)
     D2->>D2: Actualiza su copia local con la versión vencedora
-\`\`\`
+```
 
 **Aspectos notables:** este es el escenario de mayor riesgo técnico del árbol de utilidad (Riesgo: Alta), porque depende de que los relojes de ambos dispositivos sean razonablemente confiables para que LWW elija correctamente.
 
@@ -345,7 +345,7 @@ sequenceDiagram
 4. Se despliega la nueva versión del módulo `:parser`.
 5. A partir de ese momento, `:parser` reconoce el nuevo formato sin afectar el comportamiento de los bancos existentes.
 
-\`\`\`mermaid
+```mermaid
 sequenceDiagram
     participant DEV as Equipo de desarrollo
     participant REG as Registro de reglas (dentro de :parser)
@@ -358,7 +358,7 @@ sequenceDiagram
     GIT-->>DEV: git diff --stat confirma 0 cambios<br/>fuera del registro de reglas
     DEV->>PARSER: Despliega la nueva versión
     Note over PARSER: Reconoce el nuevo formato sin afectar<br/>las entidades ya soportadas
-\`\`\`
+```
 
 **Aspectos notables:** este escenario es el que justifica directamente la decisión del ADR-0002 (Parsing Híbrido) — la separación en un registro de reglas dentro de `:parser` es lo que hace posible este bajo esfuerzo de modificación (≤ 4 h, según la medida de ESC-03).
 
@@ -376,7 +376,7 @@ sequenceDiagram
 4. El atacante intentaría obtener la llave de cifrado, pero esta vive en el Android Keystore, protegida por el hardware/cuenta del dispositivo y nunca se guarda junto a los datos.
 5. Sin la llave, el 0% de los campos financieros es legible en texto plano.
 
-\`\`\`mermaid
+```mermaid
 sequenceDiagram
     participant ATK as Atacante (acceso físico)
     participant FS as Sistema de archivos del dispositivo
@@ -389,7 +389,7 @@ sequenceDiagram
     ATK->>KS: Intenta obtener la llave de cifrado
     KS-->>ATK: Acceso denegado (llave protegida por el sistema)
     Note over ATK,CORE: Sin la llave, 0% de los campos<br/>financieros es legible en texto plano
-\`\`\`
+```
 
 **Aspectos notables:** este escenario verifica directamente la restricción RL-01 (Habeas Data) y RT-03 — la seguridad no depende de ocultar el archivo, sino de que sea inútil sin la llave, que es la práctica correcta de cifrado en reposo.
 
