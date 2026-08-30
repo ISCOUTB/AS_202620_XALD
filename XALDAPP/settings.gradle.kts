@@ -24,4 +24,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "XALD"
 include(":app")
- 
+include(":syncqueue")
+include(":parser")
+include(":corefinanciero")
+include(":aigemini")
