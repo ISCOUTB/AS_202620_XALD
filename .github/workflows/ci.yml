@@ -5,6 +5,7 @@ on:
     branches: [ "experimental", "main" ]
   pull_request:
     branches: [ "experimental", "main" ]
+  workflow_dispatch:
 
 jobs:
   build-and-test:
