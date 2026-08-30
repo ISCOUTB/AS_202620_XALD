@@ -109,16 +109,17 @@ La idea central es que el usuario casi no tiene que hacer nada manualmente: el s
 
 ## Technical Context
 
-Acá se muestra por dónde entra y sale la información, y cómo viaja de un lado a otro. Se agregó una columna de **Alcance** para dejar explícito cuáles interfaces cruzan la frontera del sistema (Externo, y por tanto sí aparecen como conectores hacia afuera en el C4 de Contexto) y cuáles ocurren dentro de XALD entre sus propios contenedores (Interno, documentadas a nivel de Contenedores/C2).
+Acá se muestra por dónde entra y sale la información, y cómo viaja de un lado a otro. Cada fila referencia el conector numerado correspondiente del C1 (`docs/c4/c4.md`) cuando aplica. Se mantiene la columna de **Alcance** para dejar explícito cuáles interfaces cruzan la frontera del sistema (Externo), cuáles cruzan red pero permanecen dentro de la frontera (Entre Contenedores) y cuáles son llamadas internas sin red (Interno).
 
 | Interfaz Técnica | Alcance | Canal / Protocolo | Formato de Datos | Cifrado / Seguridad |
 | --- | --- | --- | --- | --- |
-| Sistema Operativo → App XALD | Externo | Android BroadcastReceiver (Eventos del SO) | Texto plano (SmsMessage) | Permiso Android RECEIVE_SMS |
-| App XALD → Backend XALD | Entre Contenedores / REST HTTPS | HTTPS / REST (POST/PUT) | Lotes JSON (Sync Queue) | TLS 1.3 + Tokens de Sesión |
-| App XALD → DB Local | Interno | Llamada interna SQLite / Room | Objetos Relacionales / Filas | AES-256 vía Android Keystore |
-| App XALD → Backend XALD | Interno | HTTPS / REST (POST/PUT) | Lotes JSON (Sync Queue) | TLS 1.3 + Tokens de Sesión |
+| SO Android/SMS → Aplicación XALD (conector 1) | Externo | Android BroadcastReceiver (Eventos del SO) | Texto plano (SmsMessage) | Permiso Android RECEIVE_SMS |
+| Aplicación XALD ↔ Google Gemini API (conector 2) | Externo | HTTPS / REST (POST) | JSON (responseMimeType: application/json) | TLS 1.3 + API Key |
+| Usuario Final ↔ Aplicación XALD (conector 3) | Externo | UI nativa / Reportes en pantalla | Vistas y datos locales | N/A (interacción local en el dispositivo) |
+| Aplicación XALD ↔ Backend XALD (conector 4) | Entre Contenedores | HTTPS / REST (POST/PUT) | Lotes JSON (Sync Queue) | TLS 1.3 + Tokens de Sesión |
+| Aplicación XALD → DB Local | Interno | Llamada interna SQLite / Room | Objetos Relacionales / Filas | AES-256 vía Android Keystore |
 
-El diagrama de contexto formal se encuentra en `docs/c4/c4.md`. Las interfaces marcadas como **Externo** aparecen allí como conectores que cruzan la frontera del sistema (C1). Las marcadas como **Entre Contenedores** cruzan red pero permanecen dentro de la frontera de XALD — es el caso del Backend XALD, representado dentro del recuadro del sistema, en coherencia con la nota de alcance del Business Context — y se documentan a nivel de Contenedores (C2). Las marcadas como **Interno** son llamadas en el mismo proceso, sin cruzar red.
+El diagrama de contexto formal se encuentra en `docs/c4/c4.md`. Las interfaces marcadas como **Externo** corresponden a los conectores 1, 2 y 3, que cruzan la frontera del sistema en el C1. La marcada como **Entre Contenedores** corresponde al conector 4: cruza red, pero permanece dentro de la frontera de XALD —es el caso del Backend XALD, representado dentro del recuadro del sistema— y se documenta a fondo en el nivel de Contenedores (C2). La marcada como **Interno** es una llamada en el mismo proceso, sin cruzar red, y por eso no tiene número de conector en el C1.
 
 **INPUT/OUTPUT MAP**
 
@@ -129,17 +130,19 @@ El diagrama de contexto formal se encuentra en `docs/c4/c4.md`. Las interfaces m
         v
 [Sistema Operativo]
         |
-        |  evento local (BroadcastReceiver)
+        |  1 · Notificación SMS (BroadcastReceiver)
         v
-[App XALD] --texto del comercio--> [Google Gemini API]
-        |  <---categoría sugerida (JSON)---
+[Aplicación XALD] --2 · Inferencia / JSON--> [Google Gemini API]
+        |          <---categoría sugerida (JSON)---
         |
         |  guardado local (cifrado AES-256)
         v
-[Base de datos local] ------ (interno a XALD) ------ [Backend XALD]
-        |                cuando hay conexión (sync HTTPS/REST)
+[Base de datos local]
 
-[Usuario final] <-- consulta saldo, reportes, alertas -- [App XALD]
+[Aplicación XALD] <==4 · Sincronización REST==> [Backend XALD]
+        (ambos dentro de la frontera del sistema XALD, ver C1)
+
+[Usuario final] <--3 · UI / Reportes--> [Aplicación XALD]
 ```
 
 # Solution Strategy 
