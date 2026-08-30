@@ -24,6 +24,8 @@ jobs:
 
       - name: Dar permisos de ejecución a Gradle Wrapper
         run: chmod +x gradlew
+        working-directory: XALDAPP
 
       - name: Ejecutar pruebas unitarias de los módulos
         run: ./gradlew testDebugUnitTest
+        working-directory: XALDAPP
