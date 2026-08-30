@@ -159,52 +159,54 @@ Ideas principales y enfoques de solución que definen cómo XALD resuelve el pro
 
 # Building Block View
 
-La vista de bloques de construcción muestra la descomposición del sistema XALD en sus componentes principales, desde una perspectiva de caja blanca (Nivel 1) hasta el detalle interno del bloque de la App Móvil (Nivel 2).
+La vista de bloques de construcción muestra la descomposición de XALD en dos niveles, alineados directamente con los niveles **C1** y **C2** del modelo C4 documentado en `docs/c4/c4.md`, y con el esqueleto de arranque ya implementado (`Bootstrapper` + módulos `AppModule`).
 
 | Bloque | Responsabilidad |
 | :--- | :--- |
-| App Móvil | Es lo que ve y usa el usuario; ahí pasa todo el proceso de capturar, guardar y mostrar la información. |
-| Backend | Hace de puente entre la app y el servicio de IA. |
-| Servicio externo de IA | Clasifica el nombre del negocio en una categoría de gasto. |
+| **Aplicación XALD** | Es lo que ve y usa el usuario; ahí pasa todo el proceso de capturar, procesar, guardar y mostrar la información. |
+| **Backend XALD** | Sincroniza y respalda las transacciones de la Aplicación XALD; vive dentro de la frontera del sistema, pero como contenedor independiente. |
 
-### 5.1 Nivel 1 — Sistema XALD
+*Nota de alcance: la API de Gemini y el SO Android/SMS no se listan como bloques del sistema porque, según el C1 (`docs/c4/c4.md`), son sistemas externos fuera de la frontera de XALD — ya están documentados como actores externos en la Sección 3 (Context and Scope).*
 
-Vista de caja blanca del sistema completo: la **App Móvil Android** captura y gestiona la información financiera del usuario, mientras el **Backend XALD** la procesa y sincroniza.
+### 5.1 Nivel 1 — Sistema XALD (corresponde al C1 de `docs/c4/c4.md`)
 
-| 1. App Móvil Android | 2. Backend XALD |
+Vista de caja blanca del sistema completo: dentro de la frontera "Sistema XALD" conviven dos contenedores, la **Aplicación XALD** y el **Backend XALD**, conectados por el **conector 4 (Sincronización REST)**. Ambos son necesarios para completar el ciclo de vida de una transacción, pero solo la Aplicación XALD es visible directamente para el usuario (conector 3) y solo ella recibe las notificaciones bancarias (conector 1) y consulta la IA (conector 2).
+
+| 1. Aplicación XALD | 2. Backend XALD |
 | :--- | :--- |
-| • Ingesta de Notificaciones | • Servidor API REST |
-| • Parser Local (Regex) | • Procesamiento de Reportes |
-| • Base de Datos Cifrada | • Motor de Sincronización LWW |
-| • UI / Gestión Financiera | • Base de Datos Remota |
+| • Ingesta de notificaciones/SMS | • Servidor API REST |
+| • Parseo local (Regex) + inferencia IA | • Procesamiento de reportes |
+| • Base de datos local cifrada | • Motor de sincronización (LWW) |
+| • UI / Gestión financiera | • Persistencia remota (respaldo) |
 
-1. **App Móvil Android:** Captura, procesa y presenta la información financiera del usuario de forma local, incluyendo la ingesta de notificaciones bancarias, el parseo con expresiones regulares, el almacenamiento cifrado y la interfaz de gestión financiera.
-
-2. **Backend XALD:** Expone la API REST, procesa reportes y ejecuta la sincronización de datos entre dispositivos mediante el motor *Last-Write-Wins* (LWW), manteniendo la base de datos remota como respaldo consolidado.
+1. **Aplicación XALD:** captura, procesa y presenta la información financiera del usuario de forma local: ingesta de notificaciones bancarias, parseo con expresiones regulares con apoyo de IA para los casos ambiguos, almacenamiento cifrado y la interfaz de gestión financiera.
+2. **Backend XALD:** expone la API REST, procesa reportes y ejecuta la sincronización de datos entre dispositivos mediante *Last-Write-Wins* (LWW), manteniendo la persistencia remota como respaldo consolidado.
 
 ---
 
-### 5.2 Nivel 2 — App Móvil Android
+### 5.2 Nivel 2 — Aplicación Móvil Android (corresponde al C2 de `docs/c4/c4.md`)
 
-Descomposición del bloque **"App Móvil Android"** en sus cuatro módulos internos y el flujo de datos entre ellos.
+Descomposición del contenedor "Aplicación Móvil Android" en sus módulos internos, tal como aparecen en el C2: el módulo `:app` actúa como orquestador central y delega en cuatro submódulos independientes. La tabla incluye además su correspondencia con el esqueleto de código ya escrito.
 
-| Módulo | Función / Componente Interno |
-| :--- | :--- |
-| **1.1 Ingestion Module** | `BroadcastReceiver` / `SMS` |
-| ⬇️ | |
-| **1.2 Processing & Parser** | `Regex Engine` + `Gemini API Client` |
-| ⬇️ | |
-| **1.3 Data & Sync Module** | `SQLite`/`Room AES-256` + `Sync Queue` |
-| ⬇️ | |
-| **1.4 UI & Dashboard** | Presentación / Reportes |
+| Módulo (C2) | Función | Carpeta en el esqueleto |
+| :--- | :--- | :--- |
+| **`:app`** | Capa de UI y orquestación; recibe la notificación del SO y dispara el flujo | `modules/ui/` (`UiModule`) + `Bootstrapper.kt` |
+| **`:parser`** | Regex y lectura de SMS | `modules/parser/` (`ParserModule`) |
+| **`:corefinanciero`** | Base de datos local y gestión financiera | `modules/database/` (`DatabaseModule`) |
+| **`:syncqueue`** | Cola offline y sincronización con el Backend | `modules/sync/` (`SyncModule`) |
+| **`:aigemini`** | Cliente HTTP / IA para categorización | *pendiente de separar — hoy vive como `TODO` dentro de `ParserModule`* |
 
-* **1.1 Ingestion Module (`BroadcastReceiver` / `SMS`):** Captura de forma pasiva los mensajes y notificaciones bancarias entrantes en el dispositivo, sin intervención del usuario.
+El orden de arranque definido en `Bootstrapper.kt` respeta esta misma descomposición: `DatabaseModule → CaptureModule → ParserModule → SyncModule → UiModule`. Cada módulo implementa el contrato `AppModule` (con un único método `init()`), lo que permite que el `Bootstrapper` los trate a todos por igual sin conocer sus detalles internos, y que si uno falla, aísle el error sin tumbar el resto de la aplicación.
 
-* **1.2 Processing & Parser Module (`Regex Engine` + `Gemini API Client`):** Interpreta el texto capturado usando expresiones regulares para los casos conocidos y, cuando el resultado es ambiguo, recurre a la API de Gemini como soporte adicional.
+**Ajuste de consistencia con el C2:** el esqueleto tenía previamente un módulo `RemoteDatabaseModule` dentro del arranque de la app. Con el C2 ya definido, ese bloque no corresponde al lado de la Aplicación Móvil — la persistencia remota vive dentro del contenedor **Backend XALD** (ver 5.1), y la app solo la alcanza a través de `:syncqueue` (conector 4). Por eso se retira del `Bootstrapper` de la app y queda documentada únicamente como responsabilidad del Backend XALD.
 
-* **1.3 Data & Sync Module (`SQLite`/`Room AES-256` + `Sync Queue`):** Almacena las transacciones de forma cifrada en el dispositivo y gestiona la cola de sincronización asíncrona con el backend.
+**Pendiente para el próximo incremento:** separar el cliente de IA (`:aigemini`) de `ParserModule` en su propio módulo, para que el código refleje exactamente los cinco módulos del C2 en lugar de cuatro.
 
-* **1.4 UI & Dashboard:** Presenta el saldo, el historial de transacciones y los reportes de gasto, y permite al usuario corregir categorías o registrar movimientos manualmente.
+* **`:app` (UI y Orquestación):** recibe el SMS del sistema operativo (conector 1) y coordina el resto de los módulos; también expone la UI y los reportes al usuario (conector 3).
+* **`:parser` (Regex y Lectura de SMS):** interpreta el texto capturado con reglas locales conocidas, y delega en `:aigemini` los casos ambiguos.
+* **`:corefinanciero` (Base de Datos y Finanzas):** guarda las transacciones cifradas (AES-256) y expone el saldo y el historial al módulo `:app`.
+* **`:syncqueue` (Cola Offline y Sincronización):** encola las transacciones pendientes y las sincroniza con el Backend XALD (conector 4) cuando hay conexión disponible.
+* **`:aigemini` (Cliente HTTP / IA):** consulta la API de Gemini (conector 2) para categorizar los comercios que el motor local no puede resolver.
 
 # Runtime View
 
