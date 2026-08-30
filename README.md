@@ -1,7 +1,7 @@
 # AS_20262_XALD
 PROYECTO XALD, APP FINANZAS PERSONALES
 
-#Corte vertical ejecutable
+
 ## 🚀 Corte Vertical Ejecutable
 
 El proyecto cuenta con un corte vertical integrado que valida el flujo de datos completo a través de sus módulos Gradle (`:app`, `:parser`, `:aigemini`, `:corefinanciero` y `:syncqueue`).
