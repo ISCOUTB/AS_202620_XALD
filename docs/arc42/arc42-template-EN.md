@@ -113,7 +113,7 @@ Acá se muestra por dónde entra y sale la información, y cómo viaja de un lad
 | Interfaz Técnica | Alcance | Canal / Protocolo | Formato de Datos | Cifrado / Seguridad |
 | --- | --- | --- | --- | --- |
 | Sistema Operativo → App XALD | Externo | Android BroadcastReceiver (Eventos del SO) | Texto plano (SmsMessage) | Permiso Android RECEIVE_SMS |
-| App XALD → Gemini API | Externo | HTTPS / Rest (POST) | JSON (responseMimeType: application/json) | TLS 1.3 + API Key |
+| App XALD → Backend XALD | Entre Contenedores / REST HTTPS | HTTPS / REST (POST/PUT) | Lotes JSON (Sync Queue) | TLS 1.3 + Tokens de Sesión |
 | App XALD → DB Local | Interno | Llamada interna SQLite / Room | Objetos Relacionales / Filas | AES-256 vía Android Keystore |
 | App XALD → Backend XALD | Interno | HTTPS / REST (POST/PUT) | Lotes JSON (Sync Queue) | TLS 1.3 + Tokens de Sesión |
 
