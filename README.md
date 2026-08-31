@@ -1,6 +1,32 @@
 # AS_20262_XALD
 PROYECTO XALD, APP FINANZAS PERSONALES
 
+
+## 🚀 Corte Vertical Ejecutable
+
+El proyecto cuenta con un corte vertical integrado que valida el flujo de datos completo a través de sus módulos Gradle (`:app`, `:parser`, `:aigemini`, `:corefinanciero` y `:syncqueue`).
+
+### 🛠️ Prueba de Integración
+La prueba de corte vertical (`Cortevertical.kt`) orquesta la recepción del mensaje bancario crudo, invoca las reglas del parser y valida la estructuración del DTO de la transacción.
+
+### 📸 Evidencia de Ejecución Local
+<img width="1365" height="718" alt="Captura de pantalla 2026-08-30 144428" src="https://github.com/user-attachments/assets/13427b6e-b78a-4f51-8bfd-5350157ac22e" />
+
+Dede la carpeta Raiz del proyecto de Android Studio: Con la variable de entorno JAVA_HOME Configurada
+```powershell
+cd XALDAPP
+.\gradlew.bat test
+```
+### Sumado al CI pasado todo en verde en actions
+
+##### Si no tiene configuradas las variables de entorno de Java/Gradle en su sistema:
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+$env:Path = "$env:JAVA_HOME\bin;" + $env:Path
+cd XALDAPP
+.\gradlew.bat test
+```
+
 # Comandos de Ejecución y Verificación
 
 ### Guía de Verificación y Compilación Local

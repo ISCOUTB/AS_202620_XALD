@@ -14,11 +14,11 @@ En la gestión financiera personal actual se identifican dos limitaciones estruc
 - **Fricción en la entrada de datos (carga cognitiva).** Anotar cada transacción a mano toma tiempo; al cabo de pocas semanas el usuario abandona la app, generando pérdida de integridad del historial financiero ("gastos hormiga" no registrados).
 - **Dependencia estricta de conectividad (acoplamiento a red).** Si el usuario no tiene datos o la señal es mala, la mayoría de apps no abren o no permiten registrar nada.
 
-**Solución propuesta:** una app móvil que registra los gastos con mínima intervención del usuario, leyendo automáticamente notificaciones/SMS bancarios o archivos CSV exportados del banco, y que funciona sin internet para mostrar la información al instante (offline-first).
+**Solución propuesta:** una app móvil que registra los gastos con mínima intervención del usuario, leyendo automáticamente notificaciones/SMS bancarios, y que funciona sin internet para mostrar la información al instante (offline-first).
 
 **Cómo funciona el sistema (flujo de datos):** XALD funciona como una tubería de datos (pipeline) de 4 pasos:
 
-1. **Captura:** vía SMS/notificación bancaria (leída automáticamente en segundo plano) o vía archivo CSV subido por el usuario.
+1. **Captura:** vía SMS/notificación bancaria, leída automáticamente en segundo plano.
 2. **Validación y limpieza:** se extraen fecha, monto y comercio, verificando que los datos sean válidos.
 3. **Categorización inteligente:** el nombre del comercio se envía a una API de IA (Gemini API, capa gratuita) que devuelve la categoría del gasto (ej. "Alimentación").
 4. **Guardado local:** la transacción categorizada se persiste cifrada en el dispositivo (SQLite + SQLCipher, cifrado AES-256), visible al instante aunque no haya internet.
@@ -102,22 +102,24 @@ Aquí se muestra quién o qué interactúa con XALD desde afuera, sin entrar en 
 | **SO Android / Entidades Bancarias (SMS)** | Sistema operativo que entrega las notificaciones/SMS emitidos por las entidades bancarias | Mensaje de texto (SMS) con monto, comercio y fecha | *Ninguna — el conector es unidireccional (ver C1): XALD solo escucha, no le responde nada al SO ni al banco* |
 | **Google Gemini API** | API de IA externa para la inferencia de categorías de gasto | Categoría sugerida en formato JSON | Cadena de texto limpia del comercio / origen |
 
-**Nota de alcance:** el Backend XALD (servidor de sincronización) **no aparece como actor externo**, porque forma parte interna del sistema XALD, igual que la base de datos local. En el diagrama de Contexto (`docs/c4/c4.md`) se representa **dentro del recuadro del sistema XALD**, no como sistema externo. Su rol de sincronización y almacenamiento remoto se detalla en el nivel de Contenedores (C2).
+**Nota de alcance:** el Backend XALD se representa **dentro de la frontera del sistema XALD** (subgrafo "Sistema XALD · Frontera del proyecto" en el C1), no como actor externo — por eso no tiene fila propia en la tabla de arriba. Con la actualización del diagrama, la conexión entre la Aplicación XALD y el Backend XALD ya aparece explícita dentro del propio C1 como el **conector 4 (Sincronización REST)**, aunque su función interna se sigue detallando a fondo en el nivel de Contenedores (C2). Ver `docs/c4/c4.md`.
 
 La idea central es que el usuario casi no tiene que hacer nada manualmente: el sistema capta la información sola desde los SMS bancarios, usa la IA de Gemini para sugerir la categoría del gasto, y el usuario solo interviene para revisar, corregir o consultar.
 
+
 ## Technical Context
 
-Acá se muestra por dónde entra y sale la información, y cómo viaja de un lado a otro. Se agregó una columna de **Alcance** para dejar explícito cuáles interfaces cruzan la frontera del sistema (Externo, y por tanto sí aparecen como conectores hacia afuera en el C4 de Contexto) y cuáles ocurren dentro de XALD entre sus propios contenedores (Interno, documentadas a nivel de Contenedores/C2).
+Acá se muestra por dónde entra y sale la información, y cómo viaja de un lado a otro. Cada fila referencia el conector numerado correspondiente del C1 (`docs/c4/c4.md`) cuando aplica. Se mantiene la columna de **Alcance** para dejar explícito cuáles interfaces cruzan la frontera del sistema (Externo), cuáles cruzan red pero permanecen dentro de la frontera (Entre Contenedores) y cuáles son llamadas internas sin red (Interno).
 
 | Interfaz Técnica | Alcance | Canal / Protocolo | Formato de Datos | Cifrado / Seguridad |
 | --- | --- | --- | --- | --- |
-| Sistema Operativo → App XALD | Externo | Android BroadcastReceiver (Eventos del SO) | Texto plano (SmsMessage) | Permiso Android RECEIVE_SMS |
-| App XALD → Gemini API | Externo | HTTPS / Rest (POST) | JSON (responseMimeType: application/json) | TLS 1.3 + API Key |
-| App XALD → DB Local | Interno | Llamada interna SQLite / Room | Objetos Relacionales / Filas | AES-256 vía Android Keystore |
-| App XALD → Backend XALD | Interno | HTTPS / REST (POST/PUT) | Lotes JSON (Sync Queue) | TLS 1.3 + Tokens de Sesión |
+| SO Android/SMS → Aplicación XALD (conector 1) | Externo | Android BroadcastReceiver (Eventos del SO) | Texto plano (SmsMessage) | Permiso Android RECEIVE_SMS |
+| Aplicación XALD ↔ Google Gemini API (conector 2) | Externo | HTTPS / REST (POST) | JSON (responseMimeType: application/json) | TLS 1.3 + API Key |
+| Usuario Final ↔ Aplicación XALD (conector 3) | Externo | UI nativa / Reportes en pantalla | Vistas y datos locales | N/A (interacción local en el dispositivo) |
+| Aplicación XALD ↔ Backend XALD (conector 4) | Entre Contenedores | HTTPS / REST (POST/PUT) | Lotes JSON (Sync Queue) | TLS 1.3 + Tokens de Sesión |
+| Aplicación XALD → DB Local | Interno | Llamada interna SQLite / Room | Objetos Relacionales / Filas | AES-256 vía Android Keystore |
 
-El diagrama de contexto formal se encuentra en `docs/c4/c4.md`. Las interfaces marcadas como **Externo** aparecen allí como conectores que cruzan la frontera del sistema, mientras que las marcadas como **Interno** ocurren entre contenedores situados dentro de la frontera de XALD — es el caso del Backend XALD, que en el diagrama se representa dentro del recuadro del sistema, en coherencia con la nota de alcance del Business Context.
+El diagrama de contexto formal se encuentra en `docs/c4/c4.md`. Las interfaces marcadas como **Externo** corresponden a los conectores 1, 2 y 3, que cruzan la frontera del sistema en el C1. La marcada como **Entre Contenedores** corresponde al conector 4: cruza red, pero permanece dentro de la frontera de XALD —es el caso del Backend XALD, representado dentro del recuadro del sistema— y se documenta a fondo en el nivel de Contenedores (C2). La marcada como **Interno** es una llamada en el mismo proceso, sin cruzar red, y por eso no tiene número de conector en el C1.
 
 **INPUT/OUTPUT MAP**
 
@@ -128,24 +130,26 @@ El diagrama de contexto formal se encuentra en `docs/c4/c4.md`. Las interfaces m
         v
 [Sistema Operativo]
         |
-        |  evento local (BroadcastReceiver)
+        |  1 · Notificación SMS (BroadcastReceiver)
         v
-[App XALD] --texto del comercio--> [Google Gemini API]
-        |  <---categoría sugerida (JSON)---
+[Aplicación XALD] --2 · Inferencia / JSON--> [Google Gemini API]
+        |          <---categoría sugerida (JSON)---
         |
         |  guardado local (cifrado AES-256)
         v
-[Base de datos local] ------ (interno a XALD) ------ [Backend XALD]
-        |                cuando hay conexión (sync HTTPS/REST)
+[Base de datos local]
 
-[Usuario final] <-- consulta saldo, reportes, alertas -- [App XALD]
+[Aplicación XALD] <==4 · Sincronización REST==> [Backend XALD]
+        (ambos dentro de la frontera del sistema XALD, ver C1)
+
+[Usuario final] <--3 · UI / Reportes--> [Aplicación XALD]
 ```
 
 # Solution Strategy 
 
 Ideas principales y enfoques de solución que definen cómo XALD resuelve el problema. Las herramientas que se mencionan más adelante son solo ejemplos de cómo se podría implementar cada idea, no una decisión cerrada; se pueden cambiar según lo que mejor funcione en el momento.
 
-* **Para cumplir con las metas de calidad:** La app realiza una captura pasiva e ingesta automática leyendo mensajes o notificaciones del banco mediante receptores nativos (`BroadcastReceiver` / `SMS`) y soporte para archivos CSV. La IA actúa como un soporte extra no bloqueante: si falla o no hay red, la transacción se guarda como *"Sin Categorizar"*. Además, las transacciones conocidas se procesan rápido localmente con expresiones regulares (`Regex`) para ahorrar batería y reducir costos, reservando la IA solo para casos ambiguos.
+* **Para cumplir con las metas de calidad:** La app realiza una captura pasiva e ingesta automática leyendo mensajes o notificaciones del banco mediante receptores nativos (`BroadcastReceiver` / `SMS`). La IA actúa como un soporte extra no bloqueante...
 
 * **En cuanto al patrón de arquitectura:** Se adopta un enfoque *offline-first* donde toda la información se almacena primero en el dispositivo (mediante `SQLite`/`Room`) para garantizar disponibilidad total sin internet. La sincronización con el servidor se realiza de forma asíncrona mediante una cola local (*Sync Queue*) basada en marcas de tiempo (`timestamps`) e identificadores únicos (`UUIDs`), resolviendo conflictos en el backend mediante *Last-Write-Wins* (LWW) sin bloquear la interfaz.
 
@@ -155,56 +159,59 @@ Ideas principales y enfoques de solución que definen cómo XALD resuelve el pro
 
 # Building Block View
 
-La vista de bloques de construcción muestra la descomposición del sistema XALD en sus componentes principales, desde una perspectiva de caja blanca (Nivel 1) hasta el detalle interno del bloque de la App Móvil (Nivel 2).
+La vista de bloques de construcción muestra la descomposición de XALD en dos niveles, alineados directamente con los niveles **C1** y **C2** del modelo C4 documentado en `docs/c4/c4.md`, y con el esqueleto de arranque ya implementado (`Bootstrapper` + módulos `AppModule`).
 
 | Bloque | Responsabilidad |
 | :--- | :--- |
-| App Móvil | Es lo que ve y usa el usuario; ahí pasa todo el proceso de capturar, guardar y mostrar la información. |
-| Backend | Hace de puente entre la app y el servicio de IA. |
-| Servicio externo de IA | Clasifica el nombre del negocio en una categoría de gasto. |
+| **Aplicación XALD** | Es lo que ve y usa el usuario; ahí pasa todo el proceso de capturar, procesar, guardar y mostrar la información. |
+| **Backend XALD** | Sincroniza y respalda las transacciones de la Aplicación XALD; vive dentro de la frontera del sistema, pero como contenedor independiente. |
 
-### 5.1 Nivel 1 — Sistema XALD
+*Nota de alcance: la API de Gemini y el SO Android/SMS no se listan como bloques del sistema porque, según el C1 (`docs/c4/c4.md`), son sistemas externos fuera de la frontera de XALD — ya están documentados como actores externos en la Sección 3 (Context and Scope).*
 
-Vista de caja blanca del sistema completo: la **App Móvil Android** captura y gestiona la información financiera del usuario, mientras el **Backend XALD** la procesa y sincroniza.
+### 5.1 Nivel 1 — Sistema XALD (corresponde al C1 de `docs/c4/c4.md`)
 
-| 1. App Móvil Android | 2. Backend XALD |
+Vista de caja blanca del sistema completo: dentro de la frontera "Sistema XALD" conviven dos contenedores, la **Aplicación XALD** y el **Backend XALD**, conectados por el **conector 4 (Sincronización REST)**. Ambos son necesarios para completar el ciclo de vida de una transacción, pero solo la Aplicación XALD es visible directamente para el usuario (conector 3) y solo ella recibe las notificaciones bancarias (conector 1) y consulta la IA (conector 2).
+
+| 1. Aplicación XALD | 2. Backend XALD |
 | :--- | :--- |
-| • Ingesta de Notificaciones | • Servidor API REST |
-| • Parser Local (Regex) | • Procesamiento de Reportes |
-| • Base de Datos Cifrada | • Motor de Sincronización LWW |
-| • UI / Gestión Financiera | • Base de Datos Remota |
+| • Ingesta de notificaciones/SMS (`:parser`) | • Servidor API REST |
+| • Parseo local (Regex) + inferencia IA (`:parser` + `:aigemini`) | • Procesamiento de reportes |
+| • Base de datos local cifrada (`:corefinanciero`) | • Motor de sincronización (LWW) |
+| • Cola de sincronización offline (`:syncqueue`) | • Persistencia remota (respaldo) |
+| • UI / Gestión financiera (`:app`) | |
 
-1. **App Móvil Android:** Captura, procesa y presenta la información financiera del usuario de forma local, incluyendo la ingesta de notificaciones bancarias, el parseo con expresiones regulares, el almacenamiento cifrado y la interfaz de gestión financiera.
-
-2. **Backend XALD:** Expone la API REST, procesa reportes y ejecuta la sincronización de datos entre dispositivos mediante el motor *Last-Write-Wins* (LWW), manteniendo la base de datos remota como respaldo consolidado.
+1. **Aplicación XALD:** captura, procesa y presenta la información financiera del usuario de forma local: ingesta de notificaciones bancarias, parseo con expresiones regulares con apoyo de IA para los casos ambiguos, almacenamiento cifrado y la interfaz de gestión financiera.
+2. **Backend XALD:** expone la API REST, procesa reportes y ejecuta la sincronización de datos entre dispositivos mediante *Last-Write-Wins* (LWW), manteniendo la persistencia remota como respaldo consolidado.
 
 ---
 
-### 5.2 Nivel 2 — App Móvil Android
+### 5.2 Nivel 2 — Aplicación Móvil Android (corresponde al C2 de `docs/c4/c4.md`)
 
-Descomposición del bloque **"App Móvil Android"** en sus cuatro módulos internos y el flujo de datos entre ellos.
+Descomposición del contenedor "Aplicación Móvil Android" en sus módulos internos, tal como aparecen en el C2: el módulo `:app` actúa como orquestador central y delega en cuatro submódulos independientes. La tabla incluye además su correspondencia con el esqueleto de código ya escrito.
 
-| Módulo | Función / Componente Interno |
-| :--- | :--- |
-| **1.1 Ingestion Module** | `BroadcastReceiver` / `SMS` |
-| ⬇️ | |
-| **1.2 Processing & Parser** | `Regex Engine` + `Gemini API Client` |
-| ⬇️ | |
-| **1.3 Data & Sync Module** | `SQLite`/`Room AES-256` + `Sync Queue` |
-| ⬇️ | |
-| **1.4 UI & Dashboard** | Presentación / Reportes |
+| Módulo (C2) | Función | Carpeta en el esqueleto |
+| :--- | :--- | :--- |
+| **`:app`** | Interfaz gráfica (Jetpack Compose), Dashboard y orquestador principal | `modules/ui/` (`UiModule`) + `Bootstrapper.kt` |
+| **`:parser`** | Receptor de eventos (BroadcastReceiver) y motor de expresiones regulares (Regex Engine) | `modules/parser/` (`ParserModule`) |
+| **`:corefinanciero`** | Almacenamiento local cifrado (SQLite/Room con AES-256) | `modules/database/` (`DatabaseModule`) |
+| **`:syncqueue`** | Gestor de la cola de sincronización asíncrona (timestamps + UUIDs) | `modules/sync/` (`SyncModule`) |
+| **`:aigemini`** | Cliente HTTP y SDK de Google Gemini para categorización de comercios | *pendiente de separar — hoy vive como `TODO` dentro de `ParserModule`* |
 
-* **1.1 Ingestion Module (`BroadcastReceiver` / `SMS`):** Captura de forma pasiva los mensajes y notificaciones bancarias entrantes en el dispositivo, sin intervención del usuario.
+El orden de arranque definido en `Bootstrapper.kt` respeta esta misma descomposición: `DatabaseModule → CaptureModule → ParserModule → SyncModule → UiModule`. Cada módulo implementa el contrato `AppModule` (con un único método `init()`), lo que permite que el `Bootstrapper` los trate a todos por igual sin conocer sus detalles internos, y que si uno falla, aísle el error sin tumbar el resto de la aplicación.
 
-* **1.2 Processing & Parser Module (`Regex Engine` + `Gemini API Client`):** Interpreta el texto capturado usando expresiones regulares para los casos conocidos y, cuando el resultado es ambiguo, recurre a la API de Gemini como soporte adicional.
+**Ajuste de consistencia con el C2:** el esqueleto tenía previamente un módulo `RemoteDatabaseModule` dentro del arranque de la app. Con el C2 ya definido, ese bloque no corresponde al lado de la Aplicación Móvil — la persistencia remota vive dentro del contenedor **Backend XALD** (ver 5.1), y la app solo la alcanza a través de `:syncqueue` (conector 4). Por eso se retira del `Bootstrapper` de la app y queda documentada únicamente como responsabilidad del Backend XALD.
 
-* **1.3 Data & Sync Module (`SQLite`/`Room AES-256` + `Sync Queue`):** Almacena las transacciones de forma cifrada en el dispositivo y gestiona la cola de sincronización asíncrona con el backend.
+**Pendiente para el próximo incremento:** separar el cliente de IA (`:aigemini`) de `ParserModule` en su propio módulo, para que el código refleje exactamente los cinco módulos del C2 en lugar de cuatro.
 
-* **1.4 UI & Dashboard:** Presenta el saldo, el historial de transacciones y los reportes de gasto, y permite al usuario corregir categorías o registrar movimientos manualmente.
+* **`:app` (Interfaz gráfica, Dashboard y orquestador principal):** implementado con Jetpack Compose; recibe el SMS del sistema operativo (conector 1) y coordina el resto de los módulos, además de exponer la UI y los reportes al usuario (conector 3).
+* **`:parser` (Receptor de eventos y motor de expresiones regulares):** su `BroadcastReceiver` capta el SMS entrante y su `Regex Engine` interpreta el texto con reglas locales conocidas, delegando en `:aigemini` los casos ambiguos.
+* **`:corefinanciero` (Almacenamiento local cifrado):** guarda las transacciones en SQLite/Room con cifrado AES-256, y expone el saldo y el historial al módulo `:app`.
+* **`:syncqueue` (Gestor de la cola de sincronización asíncrona):** encola las transacciones pendientes usando timestamps + UUIDs y las sincroniza con el Backend XALD (conector 4) cuando hay conexión disponible.
+* **`:aigemini` (Cliente HTTP y SDK de Google Gemini):** consulta la API de Gemini (conector 2) para categorizar los comercios que el motor local no puede resolver.
 
 # Runtime View
 
-Esta sección muestra, para cada uno de los 5 escenarios de calidad definidos en la Sección 10 (ESC-01 a ESC-05), cómo interactúan los bloques de construcción de XALD (Sección 5) durante su ejecución. Cada escenario incluye un diagrama de secuencia UML (formato Mermaid, renderizado automáticamente por GitHub) además de la descripción paso a paso.
+Esta sección muestra, para cada uno de los 5 escenarios de calidad definidos en la Sección 10 (ESC-01 a ESC-05), cómo interactúan los módulos reales de XALD durante su ejecución. Los nombres usados corresponden a los módulos Gradle del proyecto (ver Sección 5): `:parser`, `:aigemini`, `:corefinanciero`, `:syncqueue` y `:app`. Cada escenario incluye un diagrama de secuencia UML (formato Mermaid, renderizado automáticamente por GitHub) además de la descripción paso a paso.
 
 ## 6.1 Runtime Scenario 1 — Captura, Parsing e Inferencia Automática de SMS (verifica ESC-01)
 
@@ -212,40 +219,40 @@ Esta sección muestra, para cada uno de los 5 escenarios de calidad definidos en
 
 **Pasos del escenario:**
 
-1. **Recepción del evento:** el sistema operativo Android recibe un SMS del banco y activa el BroadcastReceiver del Ingestion Module.
-2. **Filtrado:** el Ingestion Module valida el remitente y extrae el texto plano.
-3. **Parsing local (Regex):** el Processing & Parser Module evalúa el texto con expresiones regulares.
-   - **Caso A (Regex exitoso):** si reconoce el comercio y el monto, genera directamente el objeto `Transaction`.
-   - **Caso B (comercio ambiguo):** envía el texto a la Gemini API. Si la API falla o no responde, este caso se resuelve según el flujo detallado en el **Escenario 2 (ESC-02)**.
-4. **Persistencia local:** el objeto `Transaction` se envía al Data & Sync Module, que cifra los campos con AES-256, guarda la fila en SQLite y agrega el registro a la Sync Queue con su UUID y timestamp.
-5. **Notificación a la UI:** el Data & Sync Module emite el nuevo estado a través de un stream observable (propuesta: `StateFlow` de Kotlin), y el UI & Dashboard, que está suscrito a ese stream, actualiza el saldo y el reporte en pantalla automáticamente.
+1. **Recepción del evento:** el sistema operativo Android recibe un SMS del banco y activa el BroadcastReceiver del módulo `:parser`.
+2. **Filtrado:** `:parser` valida el remitente y extrae el texto plano.
+3. **Parsing local (Regex):** `:parser` evalúa el texto con expresiones regulares. **Caso A (Regex exitoso):** si reconoce el comercio y el monto, genera directamente el objeto `Transaction`. **Caso B (comercio ambiguo):** envía el texto al módulo `:aigemini`, que a su vez consulta la Gemini API externa; si falla o no responde, este caso se resuelve según el flujo detallado en el **Escenario 2 (ESC-02)**.
+4. **Persistencia local:** el objeto `Transaction` se envía a `:corefinanciero`, que cifra los campos con AES-256 y guarda la fila en la base de datos local (Room).
+5. **Encolado para sincronización:** `:corefinanciero` notifica a `:syncqueue`, que agrega el registro a la cola de sincronización con su UUID y timestamp.
+6. **Notificación a la UI:** `:corefinanciero` notifica el cambio a `:app`, que actualiza el saldo y el reporte en pantalla. *(el mecanismo exacto de notificación — StateFlow, LiveData u otro — está pendiente de confirmar contra la implementación real de `:app`)*.
 
->  ** Sugerencia , Nota:** el mecanismo exacto de notificación a la UI (`StateFlow`, `LiveData`, u otro) no estaba especificado en el repositorio — propongo `StateFlow` por ser el estándar actual en Android/Kotlin, pero confírmenlo con quien programe el módulo de UI para que el diagrama sea 100% fiel al código.
-
-\`\`\`mermaid
+```mermaid
 sequenceDiagram
     participant SO as Sistema Operativo (Android)
-    participant ING as Ingestion Module
-    participant PAR as Processing & Parser Module
-    participant GEM as Google Gemini API
-    participant DAT as Data & Sync Module
-    participant UI as UI & Dashboard
+    participant PARSER as :parser
+    participant AIGEMINI as :aigemini
+    participant GEMINI as Google Gemini API (externo)
+    participant CORE as :corefinanciero
+    participant SYNC as :syncqueue
+    participant APP as :app
 
-    SO->>ING: Broadcast SMS entrante
-    ING->>ING: Valida remitente, extrae texto plano
-    ING->>PAR: Texto plano del SMS
-    PAR->>PAR: Evalúa con Regex
+    SO->>PARSER: Broadcast SMS entrante
+    PARSER->>PARSER: Valida remitente, extrae texto plano
+    PARSER->>PARSER: Evalúa con Regex
     alt Caso A: Regex reconoce comercio y monto
-        PAR->>DAT: Transaction (comercio, monto, fecha)
+        PARSER->>CORE: Transaction (comercio, monto, fecha)
     else Caso B: comercio ambiguo
-        PAR->>GEM: Texto del comercio (HTTPS/JSON)
-        GEM-->>PAR: Categoría sugerida (ver ESC-02 si falla)
-        PAR->>DAT: Transaction (con categoría)
+        PARSER->>AIGEMINI: Texto del comercio
+        AIGEMINI->>GEMINI: Solicitud HTTPS/JSON
+        GEMINI-->>AIGEMINI: Categoría sugerida (ver ESC-02 si falla)
+        AIGEMINI-->>PARSER: Categoría sugerida
+        PARSER->>CORE: Transaction (con categoría)
     end
-    DAT->>DAT: Cifra AES-256, guarda en SQLite,<br/>agrega a Sync Queue (UUID + timestamp)
-    DAT-->>UI: Emite nuevo estado (StateFlow)
-    UI->>UI: Actualiza saldo y reportes en pantalla
-\`\`\`
+    CORE->>CORE: Cifra AES-256, guarda en Room
+    CORE->>SYNC: Agrega a la cola (UUID + timestamp)
+    CORE-->>APP: Notifica cambio de estado
+    APP->>APP: Actualiza saldo y reportes en pantalla
+```
 
 **Aspectos notables:** la IA nunca bloquea el flujo — solo interviene en el Caso B, y aun así el resultado se integra al mismo camino de persistencia que el Caso A. Esto es lo que le da a XALD su característica de captura rápida y no bloqueante.
 
@@ -253,66 +260,61 @@ sequenceDiagram
 
 ## 6.2 Runtime Scenario 2 — Indisponibilidad del Servicio de Categorización (verifica ESC-02)
 
-**Motivación:** este escenario detalla qué pasa exactamente cuando la Gemini API falla, algo que en el Escenario 1 solo se mencionaba de forma general. Aquí se especifican los tiempos, los reintentos y cómo se recupera la categoría más adelante, según la medida ya definida en la Sección 10 (umbral de 5 s, máximo 3 reintentos con espera creciente, 0 transacciones perdidas).
+**Motivación:** este escenario detalla qué pasa exactamente cuando la Gemini API falla, algo que en el Escenario 1 solo se mencionaba de forma general. Los tiempos de espera y el número de reintentos vienen de la medida ya definida en la Sección 10 (umbral de 5 s, máximo 3 reintentos con espera creciente, 0 transacciones perdidas); la reclasificación posterior todavía no está implementada como componente y se describe por separado, sin diagramarla como un flujo ya existente.
 
 **Pasos del escenario:**
 
-1. El Processing & Parser Module envía la solicitud de categoría a la Gemini API.
-2. Si no hay respuesta en **5 segundos**, se reintenta con espera creciente (propuesta: ~2 s, luego ~4 s — *backoff* exponencial simple).
-3. Si los 3 intentos fallan, la transacción se guarda igual, con la categoría **"Sin Categorizar"** — nunca se bloquea ni se pierde el registro.
-4. Un proceso en segundo plano (propuesta: *worker* periódico) revisa las transacciones "Sin Categorizar" y reintenta la categorización cuando el servicio vuelve a responder.
-5. Al recibir una categoría válida, se actualiza la transacción ya guardada, sin duplicarla.
+1. `:aigemini` envía la solicitud de categoría a la Gemini API.
+2. Si no hay respuesta en **5 segundos**, se reintenta con espera creciente (propuesta: ~2 s, luego ~4 s).
+3. Si los 3 intentos fallan, `:aigemini` devuelve a `:parser` que no fue posible categorizar, y la transacción se guarda igual en `:corefinanciero` con la categoría **"Sin Categorizar"** — nunca se bloquea ni se pierde el registro.
 
->  **Sugerencia , Nota:** el mecanismo de reintento con espera creciente y el *worker* de reclasificación periódica son una propuesta técnica razonable, construida a partir de la medida que ya está definida en ESC-02 (Sección 10) — no están confirmados en el código real. Validen con quien programe el Processing & Parser Module si el mecanismo real usa `WorkManager`, un temporizador simple, o algo distinto.
-
-\`\`\`mermaid
+```mermaid
 sequenceDiagram
-    participant PAR as Processing & Parser Module
-    participant GEM as Google Gemini API
-    participant DAT as Data & Sync Module
-    participant WM as Proceso en segundo plano (reclasificación)
+    participant PARSER as :parser
+    participant AIGEMINI as :aigemini
+    participant GEMINI as Google Gemini API (externo)
+    participant CORE as :corefinanciero
 
-    PAR->>GEM: Solicitud de categoría (texto del comercio)
+    PARSER->>AIGEMINI: Texto del comercio
+    AIGEMINI->>GEMINI: Solicitud de categoría
     alt Sin respuesta en 5 s (timeout)
-        PAR->>GEM: Reintento 1 (espera ~2 s)
+        AIGEMINI->>GEMINI: Reintento 1 (espera ~2 s)
         alt Sigue sin responder
-            PAR->>GEM: Reintento 2 (espera ~4 s)
+            AIGEMINI->>GEMINI: Reintento 2 (espera ~4 s)
             alt 3er intento también falla
-                PAR->>DAT: Transaction con categoría "Sin Categorizar"
+                AIGEMINI-->>PARSER: No fue posible categorizar
+                PARSER->>CORE: Transaction con categoría "Sin Categorizar"
             end
         end
     else Responde a tiempo
-        GEM-->>PAR: Categoría sugerida (JSON)
-        PAR->>DAT: Transaction con categoría real
+        GEMINI-->>AIGEMINI: Categoría sugerida (JSON)
+        AIGEMINI-->>PARSER: Categoría sugerida
+        PARSER->>CORE: Transaction con categoría real
     end
+```
 
-    Note over WM,DAT: Reclasificación automática posterior
-    WM->>DAT: Consulta periódica de transacciones "Sin Categorizar"
-    WM->>GEM: Reintenta categorización
-    GEM-->>WM: Categoría sugerida (JSON)
-    WM->>DAT: Actualiza la transacción con la categoría real
-\`\`\`
+> **Nota — extensión pendiente de implementar:** la reclasificación automática de transacciones "Sin Categorizar" cuando el servicio vuelve a responder requiere un componente (por ejemplo, un `Worker` periódico dentro de `:syncqueue` o `:aigemini`) que **todavía no está instanciado en el código**. Este diagrama solo cubre el flujo de captura inicial; la reclasificación queda pendiente de diseño e implementación, y no se representa aquí como si ya existiera.
 
-**Aspectos notables:** el diseño garantiza el umbral de "0 transacciones perdidas" de ESC-01 porque el registro nunca depende de que la IA responda — la categorización es un enriquecimiento posterior, no un requisito para guardar el gasto.
+**Aspectos notables:** el diseño garantiza el umbral de "0 transacciones perdidas" porque el registro nunca depende de que la IA responda — la categorización es un enriquecimiento posterior, no un requisito para guardar el gasto.
 
 ---
 
 ## 6.3 Runtime Scenario 3 — Resolución de Conflictos al Sincronizar (verifica ESC-05)
 
-**Motivación:** este escenario extiende el flujo general de sincronización (ya descrito como parte de la cola Sync Queue) al caso específico de la Sección 10: el mismo usuario edita la misma transacción en dos dispositivos distintos mientras ambos están sin conexión.
+**Motivación:** este escenario extiende el flujo general de sincronización al caso específico de la Sección 10: el mismo usuario edita la misma transacción en dos dispositivos distintos mientras ambos están sin conexión.
 
 **Pasos del escenario:**
 
-1. El Dispositivo A y el Dispositivo B editan la misma transacción mientras ambos están offline, cada uno con su propio timestamp.
-2. El Dispositivo A recupera la conexión primero y sincroniza su versión con el Backend XALD; como no hay nada más registrado para esa transacción todavía, se guarda sin conflicto.
-3. El Dispositivo B recupera la conexión después y envía su propia versión de la misma transacción.
-4. El Backend XALD detecta que ya existe un registro previo para esa transacción y aplica **Last-Write-Wins (LWW)**: compara los timestamps y conserva la versión más reciente.
+1. El Dispositivo A y el Dispositivo B editan la misma transacción mientras ambos están offline, cada uno con su propio timestamp, gestionado por su propio módulo `:syncqueue` local.
+2. El Dispositivo A recupera la conexión primero y su `:syncqueue` sincroniza la transacción con el Backend XALD; como no hay nada más registrado todavía, se guarda sin conflicto.
+3. El Dispositivo B recupera la conexión después y su `:syncqueue` envía su propia versión de la misma transacción.
+4. El Backend XALD detecta que ya existe un registro previo y aplica **Last-Write-Wins (LWW)**: compara los timestamps y conserva la versión más reciente.
 5. El dispositivo cuya versión no ganó actualiza su copia local con la versión vencedora, para que ambos dispositivos queden consistentes.
 
-\`\`\`mermaid
+```mermaid
 sequenceDiagram
-    participant D1 as Dispositivo A (Data & Sync Module)
-    participant D2 as Dispositivo B (Data & Sync Module)
+    participant D1 as Dispositivo A (:syncqueue)
+    participant D2 as Dispositivo B (:syncqueue)
     participant BK as Backend XALD (Motor LWW)
 
     Note over D1,D2: Ambos dispositivos offline,<br/>editan la misma transacción X
@@ -332,7 +334,7 @@ sequenceDiagram
     end
     BK-->>D2: Confirmación (con la versión vencedora)
     D2->>D2: Actualiza su copia local con la versión vencedora
-\`\`\`
+```
 
 **Aspectos notables:** este es el escenario de mayor riesgo técnico del árbol de utilidad (Riesgo: Alta), porque depende de que los relojes de ambos dispositivos sean razonablemente confiables para que LWW elija correctamente.
 
@@ -345,27 +347,27 @@ sequenceDiagram
 **Pasos del escenario:**
 
 1. El equipo de desarrollo identifica el formato de SMS de una entidad bancaria no soportada.
-2. Se agrega **un archivo nuevo** al registro de reglas del Regex Engine, sin tocar los archivos de las entidades ya soportadas.
+2. Se agrega **un archivo nuevo** al registro de reglas dentro del módulo `:parser`, sin tocar los archivos de las entidades ya soportadas.
 3. Se hace commit del cambio; `git diff --stat` confirma que solo se modificó el registro de reglas (0 cambios fuera de él).
-4. Se despliega la nueva versión del Processing & Parser Module.
-5. A partir de ese momento, el módulo reconoce el nuevo formato sin afectar el comportamiento de los bancos existentes.
+4. Se despliega la nueva versión del módulo `:parser`.
+5. A partir de ese momento, `:parser` reconoce el nuevo formato sin afectar el comportamiento de los bancos existentes.
 
-\`\`\`mermaid
+```mermaid
 sequenceDiagram
     participant DEV as Equipo de desarrollo
-    participant REG as Registro de reglas (Regex Engine)
+    participant REG as Registro de reglas (dentro de :parser)
     participant GIT as Control de versiones (git)
-    participant PAR as Processing & Parser Module
+    participant PARSER as :parser
 
     DEV->>DEV: Identifica el nuevo formato de SMS del banco
     DEV->>REG: Agrega una regla nueva (archivo nuevo)
     DEV->>GIT: Commit del cambio
     GIT-->>DEV: git diff --stat confirma 0 cambios<br/>fuera del registro de reglas
-    DEV->>PAR: Despliega la nueva versión
-    Note over PAR: Reconoce el nuevo formato sin afectar<br/>las entidades ya soportadas
-\`\`\`
+    DEV->>PARSER: Despliega la nueva versión
+    Note over PARSER: Reconoce el nuevo formato sin afectar<br/>las entidades ya soportadas
+```
 
-**Aspectos notables:** este escenario es el que justifica directamente la decisión del ADR-0002 (Parsing Híbrido) — la separación en un registro de reglas es lo que hace posible este bajo esfuerzo de modificación (≤ 4 h, según la medida de ESC-03).
+**Aspectos notables:** este escenario es el que justifica directamente la decisión del ADR-0002 (Parsing Híbrido) — la separación en un registro de reglas dentro de `:parser` es lo que hace posible este bajo esfuerzo de modificación (≤ 4 h, según la medida de ESC-03).
 
 ---
 
@@ -377,24 +379,24 @@ sequenceDiagram
 
 1. Un atacante con acceso físico extrae el archivo de base de datos del dispositivo (por ejemplo, con `adb pull`).
 2. Intenta leer el contenido directamente con herramientas como `strings` o `sqlite3`.
-3. El contenido resulta ilegible porque está cifrado con AES-256.
+3. El contenido resulta ilegible porque `:corefinanciero` lo cifra con AES-256.
 4. El atacante intentaría obtener la llave de cifrado, pero esta vive en el Android Keystore, protegida por el hardware/cuenta del dispositivo y nunca se guarda junto a los datos.
 5. Sin la llave, el 0% de los campos financieros es legible en texto plano.
 
-\`\`\`mermaid
+```mermaid
 sequenceDiagram
     participant ATK as Atacante (acceso físico)
     participant FS as Sistema de archivos del dispositivo
-    participant DB as Base de datos local (AES-256)
+    participant CORE as :corefinanciero (Room, AES-256)
     participant KS as Android Keystore
 
     ATK->>FS: Extrae el archivo de base de datos (ej. adb pull)
-    ATK->>DB: Intenta leer el contenido directamente
-    DB-->>ATK: Datos ilegibles (cifrados con AES-256)
+    ATK->>CORE: Intenta leer el contenido directamente
+    CORE-->>ATK: Datos ilegibles (cifrados con AES-256)
     ATK->>KS: Intenta obtener la llave de cifrado
     KS-->>ATK: Acceso denegado (llave protegida por el sistema)
-    Note over ATK,DB: Sin la llave, 0% de los campos<br/>financieros es legible en texto plano
-\`\`\`
+    Note over ATK,CORE: Sin la llave, 0% de los campos<br/>financieros es legible en texto plano
+```
 
 **Aspectos notables:** este escenario verifica directamente la restricción RL-01 (Habeas Data) y RT-03 — la seguridad no depende de ocultar el archivo, sino de que sea inútil sin la llave, que es la práctica correcta de cifrado en reposo.
 
@@ -454,12 +456,12 @@ Las decisiones arquitectónicas del proyecto se registran como ADR (Architecture
 
 | ID | Título | Decisión | Relacionado con |
 | --- | --- | --- | --- |
-| [ADR-0001](docs/adr/0001-patron-offline-first.md) | Adopción de Patrón de Arquitectura Offline-First | Persistencia primero en base de datos local cifrada (SQLite/Room); los datos se envían al backend de forma asíncrona mediante una cola de sincronización cuando hay red. | Objetivo de calidad 1 (Disponibilidad) · RT-02 · ESC-01 |
-| [ADR-0002](docs/adr/0002-parsing-hibrido.md) | Estrategia de Parsing Híbrido (Regex + librerías open source) | Usar un receptor de eventos local (RECEIVE_SMS) con un motor de expresiones regulares, en vez de una API bancaria oficial o un modelo de IA completo. | Objetivo de calidad 5 (Modificabilidad) · RT-04 · RO-02 · ESC-03 |
-| [ADR-0003](docs/adr/0003-restriccion-os.md) | Restricción de Plataforma a Android y Exclusión de iOS | Limitar el cliente exclusivamente al ecosistema Android, usando BroadcastReceiver con el permiso RECEIVE_SMS. | Objetivo de negocio OB-01 · RT-01 |
-| [ADR-0004](docs/adr/0004-seguridad-y-cifrado.md) | Modelo de Seguridad Acotado y Cifrado de Datos | Enfocar la seguridad en dos capas: cifrado local en reposo (AES-256 vía Android Keystore) y cifrado en tránsito (HTTPS/TLS). | Objetivo de calidad 3 (Seguridad básica) · RT-03 · RL-01 · ESC-04 |
-| [ADR-0005](docs/adr/0005-reduccion-de-funcionalidades.md) | Alcance Reducido en el Módulo de Analítica y Reportes (MVP) | Reducir el módulo de reportes a lo esencial (saldos consolidados, gráficos básicos, lista de movimientos), dejando fuera el motor avanzado de analítica y predicción. | RO-01 |
-| [ADR-0006](docs/adr/0006-seleccion-de-estilo-arquitectonico.md) | Selección de Estilo Arquitectónico — Monolito Modular | Adoptar un monolito modular organizado por paquetes de dominio (`parser`, `corefinanciero`, `syncqueue`, `aigemini`), en vez de arquitectura por capas o hexagonal. | RO-01 · Objetivo de calidad 5 (Modificabilidad) |
+| [ADR-0001](../adr/0001-patron-offline-first.md) | Adopción de Patrón de Arquitectura Offline-First | Persistencia primero en base de datos local cifrada (SQLite/Room); los datos se envían al backend de forma asíncrona mediante una cola de sincronización cuando hay red. | Objetivo de calidad 1 (Disponibilidad) · RT-02 · ESC-01 |
+| [ADR-0002](../adr/0002-parsing-hibrido.md) | Estrategia de Parsing Híbrido (Regex + librerías open source) | Usar un receptor de eventos local (RECEIVE_SMS) con un motor de expresiones regulares, en vez de una API bancaria oficial o un modelo de IA completo. | Objetivo de calidad 5 (Modificabilidad) · RT-04 · RO-02 · ESC-03 |
+| [ADR-0003](../adr/0003-restriccion-os.md) | Restricción de Plataforma a Android y Exclusión de iOS | Limitar el cliente exclusivamente al ecosistema Android, usando BroadcastReceiver con el permiso RECEIVE_SMS. | Objetivo de negocio OB-01 · RT-01 |
+| [ADR-0004](../adr/0004-seguridad-y-cifrado.md) | Modelo de Seguridad Acotado y Cifrado de Datos | Enfocar la seguridad en dos capas: cifrado local en reposo (AES-256 vía Android Keystore) y cifrado en tránsito (HTTPS/TLS). | Objetivo de calidad 3 (Seguridad básica) · RT-03 · RL-01 · ESC-04 |
+| [ADR-0005](../adr/0005-reduccion-de-funcionalidades.md) | Alcance Reducido en el Módulo de Analítica y Reportes (MVP) | Reducir el módulo de reportes a lo esencial (saldos consolidados, gráficos básicos, lista de movimientos), dejando fuera el motor avanzado de analítica y predicción. | RO-01 |
+| [ADR-0006](../adr/0006-seleccion-de-estilo-arquitectonico.md) | Selección de Estilo Arquitectónico — Monolito Modular | Adoptar un monolito modular organizado por paquetes de dominio (`parser`, `corefinanciero`, `syncqueue`, `aigemini`), en vez de arquitectura por capas o hexagonal. | RO-01 · Objetivo de calidad 5 (Modificabilidad) |
 
 # Quality Requirements {#section-quality-scenarios}
 
@@ -582,7 +584,7 @@ Los escenarios calificados **(A, A)** y **(A, M)** son los que condicionan las d
 | **BroadcastReceiver** | Mecanismo nativo de Android que permite a la app "escuchar" eventos del sistema operativo, como la llegada de un SMS, sin intervención directa del usuario. |
 | **C4 Model** | Modelo jerárquico de documentación de arquitectura de software en cuatro niveles de abstracción: Contexto (C1), Contenedores (C2), Componentes (C3) y Código (C4). |
 | **Carga cognitiva** | Esfuerzo mental que le exige a una persona una tarea; en XALD se usa para explicar por qué el registro manual de gastos genera abandono de la app (ver Requirements Overview, OB-01). |
-| **CSV (Comma-Separated Values)** | Formato de archivo de texto plano, separado por comas, que el usuario puede exportar desde su banco y subir a XALD como vía alterna de captura cuando no hay SMS disponible. |
+| **CSV (Comma-Separated Values)** | Formato de archivo de texto plano que el equipo consideró inicialmente como una vía alterna de captura de transacciones (exportado desde el banco). Se evaluó y se decidió **no usarlo** como método de entrada de datos del sistema (ver [ADR-0005](docs/adr/0005-reduccion-de-funcionalidades.md)). |
 | **Gastos hormiga** | Expresión coloquial para los gastos pequeños y frecuentes (café, transporte, snacks) que, por su bajo monto, suelen no registrarse manualmente y terminan perdiendo integridad el historial financiero del usuario. |
 | **Google Gemini API** | Servicio externo de inteligencia artificial de Google, usado por XALD para inferir la categoría de gasto a partir del nombre del comercio, cuando el Regex Engine no logra reconocerlo. |
 | **Habeas Data** | Derecho de las personas a conocer, actualizar y rectificar la información que existe sobre ellas en bases de datos, desarrollado por la Ley 1581 de 2012 en Colombia. |
