@@ -174,10 +174,11 @@ Vista de caja blanca del sistema completo: dentro de la frontera "Sistema XALD" 
 
 | 1. Aplicación XALD | 2. Backend XALD |
 | :--- | :--- |
-| • Ingesta de notificaciones/SMS | • Servidor API REST |
-| • Parseo local (Regex) + inferencia IA | • Procesamiento de reportes |
-| • Base de datos local cifrada | • Motor de sincronización (LWW) |
-| • UI / Gestión financiera | • Persistencia remota (respaldo) |
+| • Ingesta de notificaciones/SMS (`:parser`) | • Servidor API REST |
+| • Parseo local (Regex) + inferencia IA (`:parser` + `:aigemini`) | • Procesamiento de reportes |
+| • Base de datos local cifrada (`:corefinanciero`) | • Motor de sincronización (LWW) |
+| • Cola de sincronización offline (`:syncqueue`) | • Persistencia remota (respaldo) |
+| • UI / Gestión financiera (`:app`) | |
 
 1. **Aplicación XALD:** captura, procesa y presenta la información financiera del usuario de forma local: ingesta de notificaciones bancarias, parseo con expresiones regulares con apoyo de IA para los casos ambiguos, almacenamiento cifrado y la interfaz de gestión financiera.
 2. **Backend XALD:** expone la API REST, procesa reportes y ejecuta la sincronización de datos entre dispositivos mediante *Last-Write-Wins* (LWW), manteniendo la persistencia remota como respaldo consolidado.
@@ -190,11 +191,11 @@ Descomposición del contenedor "Aplicación Móvil Android" en sus módulos inte
 
 | Módulo (C2) | Función | Carpeta en el esqueleto |
 | :--- | :--- | :--- |
-| **`:app`** | Capa de UI y orquestación; recibe la notificación del SO y dispara el flujo | `modules/ui/` (`UiModule`) + `Bootstrapper.kt` |
-| **`:parser`** | Regex y lectura de SMS | `modules/parser/` (`ParserModule`) |
-| **`:corefinanciero`** | Base de datos local y gestión financiera | `modules/database/` (`DatabaseModule`) |
-| **`:syncqueue`** | Cola offline y sincronización con el Backend | `modules/sync/` (`SyncModule`) |
-| **`:aigemini`** | Cliente HTTP / IA para categorización | *pendiente de separar — hoy vive como `TODO` dentro de `ParserModule`* |
+| **`:app`** | Interfaz gráfica (Jetpack Compose), Dashboard y orquestador principal | `modules/ui/` (`UiModule`) + `Bootstrapper.kt` |
+| **`:parser`** | Receptor de eventos (BroadcastReceiver) y motor de expresiones regulares (Regex Engine) | `modules/parser/` (`ParserModule`) |
+| **`:corefinanciero`** | Almacenamiento local cifrado (SQLite/Room con AES-256) | `modules/database/` (`DatabaseModule`) |
+| **`:syncqueue`** | Gestor de la cola de sincronización asíncrona (timestamps + UUIDs) | `modules/sync/` (`SyncModule`) |
+| **`:aigemini`** | Cliente HTTP y SDK de Google Gemini para categorización de comercios | *pendiente de separar — hoy vive como `TODO` dentro de `ParserModule`* |
 
 El orden de arranque definido en `Bootstrapper.kt` respeta esta misma descomposición: `DatabaseModule → CaptureModule → ParserModule → SyncModule → UiModule`. Cada módulo implementa el contrato `AppModule` (con un único método `init()`), lo que permite que el `Bootstrapper` los trate a todos por igual sin conocer sus detalles internos, y que si uno falla, aísle el error sin tumbar el resto de la aplicación.
 
@@ -202,11 +203,11 @@ El orden de arranque definido en `Bootstrapper.kt` respeta esta misma descomposi
 
 **Pendiente para el próximo incremento:** separar el cliente de IA (`:aigemini`) de `ParserModule` en su propio módulo, para que el código refleje exactamente los cinco módulos del C2 en lugar de cuatro.
 
-* **`:app` (UI y Orquestación):** recibe el SMS del sistema operativo (conector 1) y coordina el resto de los módulos; también expone la UI y los reportes al usuario (conector 3).
-* **`:parser` (Regex y Lectura de SMS):** interpreta el texto capturado con reglas locales conocidas, y delega en `:aigemini` los casos ambiguos.
-* **`:corefinanciero` (Base de Datos y Finanzas):** guarda las transacciones cifradas (AES-256) y expone el saldo y el historial al módulo `:app`.
-* **`:syncqueue` (Cola Offline y Sincronización):** encola las transacciones pendientes y las sincroniza con el Backend XALD (conector 4) cuando hay conexión disponible.
-* **`:aigemini` (Cliente HTTP / IA):** consulta la API de Gemini (conector 2) para categorizar los comercios que el motor local no puede resolver.
+* **`:app` (Interfaz gráfica, Dashboard y orquestador principal):** implementado con Jetpack Compose; recibe el SMS del sistema operativo (conector 1) y coordina el resto de los módulos, además de exponer la UI y los reportes al usuario (conector 3).
+* **`:parser` (Receptor de eventos y motor de expresiones regulares):** su `BroadcastReceiver` capta el SMS entrante y su `Regex Engine` interpreta el texto con reglas locales conocidas, delegando en `:aigemini` los casos ambiguos.
+* **`:corefinanciero` (Almacenamiento local cifrado):** guarda las transacciones en SQLite/Room con cifrado AES-256, y expone el saldo y el historial al módulo `:app`.
+* **`:syncqueue` (Gestor de la cola de sincronización asíncrona):** encola las transacciones pendientes usando timestamps + UUIDs y las sincroniza con el Backend XALD (conector 4) cuando hay conexión disponible.
+* **`:aigemini` (Cliente HTTP y SDK de Google Gemini):** consulta la API de Gemini (conector 2) para categorizar los comercios que el motor local no puede resolver.
 
 # Runtime View
 
