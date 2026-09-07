@@ -30,3 +30,7 @@ Implementar una arquitectura Offline-First priorizando la persistencia en una ba
 * *Escenarios de calidad relacionados:* ESC-01 (Registro de transacción sin conexión), ESC-05 (Resolución de conflictos al sincronizar).
 * *Diagrama C4 relacionado:* C1 — Contexto (`docs/c4/c4.md`).
 * *Módulos de código relacionados:* `:corefinanciero` (persistencia local), `:syncqueue` (cola de sincronización).
+
+**Trazabilidad y Línea Base:**
+* **Versión:** Corte 1 (corte-1)
+* **Tag:** [corte-1](https://github.com/ISCOUTB/AS_202620_XALD/releases/tag/corte-1)
