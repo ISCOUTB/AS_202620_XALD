@@ -1,6 +1,5 @@
 # ADR-0002: Estrategia de Parsing Híbrido (Regex + Librerías Open Source) vs. API Bancaria / IA Completa
 * *Estatus:* Aprobado
-* *Fecha:* *(completar con la fecha real de aprobación del equipo)*
 * *Proyecto:* XALDAPP — Aplicación de gestión financiera
 
 ## Contexto y Problema
