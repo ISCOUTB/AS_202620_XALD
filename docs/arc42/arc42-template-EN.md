@@ -3,11 +3,11 @@
 ## Title: "  PROYECTO XALD  "
 ---
 
-# Introduction and Goals 
+# Introduction and Goals
 
 Esta sección presenta una visión general de XALD: qué problema resuelve, cómo funciona, qué objetivos de negocio y de calidad persigue y quiénes son las partes interesadas. Sirve como punto de entrada para el resto de la documentación de arquitectura.
 
-## Requirements Overview 
+## Requirements Overview
 
 En la gestión financiera personal actual se identifican dos limitaciones estructurales que XALD busca resolver:
 
@@ -36,7 +36,7 @@ Los siguientes son los objetivos de negocio que justifican la existencia del sis
 | **OB-03** | Tratar la información financiera conforme a la Ley 1581 de 2012 | Usuario final · Equipo de desarrollo | El usuario confía datos sensibles; el equipo responde legalmente por su tratamiento |
 | **OB-04** | Sostener la cobertura de entidades bancarias sin reescribir el sistema cada vez que una cambie el formato de sus mensajes | Equipo de desarrollo | Un formato no soportado deja sin servicio a un segmento de usuarios |
 
-## Quality Goals 
+## Quality Goals
 
 Cada objetivo de calidad se deriva de un objetivo de negocio y se verifica mediante un escenario de la sección 10.
 
@@ -54,7 +54,7 @@ Cada objetivo de calidad se deriva de un objetivo de negocio y se verifica media
 - **Presupuesto:** $0 — solo bibliotecas open-source y capas gratuitas de APIs.
 - **Privacidad (Ley 1581 de Colombia):** a la IA solo se le envía el nombre del comercio y el monto; nunca se envían nombres de usuarios ni números de cédula/cuenta.
 
-## Stakeholders 
+## Stakeholders
 
 | Rol | Contacto | Expectativas | Objetivo asociado |
 | --- | --- | --- | --- |
@@ -68,7 +68,7 @@ Cada objetivo de calidad se deriva de un objetivo de negocio y se verifica media
 
 Estas son las condiciones que ya vienen dadas para el proyecto y que no podemos cambiar. No son decisiones de diseño que tomamos nosotros por gusto, sino cosas que limitan desde antes cómo se puede construir XALD.
 
-## Restricciones Técnicas:
+## Restricciones Técnicas
 
 - **RT-01 (Exclusividad de Sistema Operativo):** La app se va a desarrollar solo para Android. La razón es que leer los SMS automáticamente en segundo plano (usando BroadcastReceiver y el permiso RECEIVE_SMS) es algo que solo se puede hacer de esa forma en Android; otros sistemas móviles no dejan que una app lea mensajes de texto así por sus políticas de seguridad. *(Origen: limitación técnica de la plataforma)*
 
@@ -80,7 +80,7 @@ Estas son las condiciones que ya vienen dadas para el proyecto y que no podemos 
 
 - **RT-05 (Consistencia Sencilla LWW):** Cuando hay un cruce entre lo que pasó en el celular y lo que hay en el servidor, gana la transacción más reciente (esto se conoce como Last-Write-Wins o LWW). Para saber cuál es la más reciente se usan marcas de tiempo y códigos únicos (UUIDs) dentro de la fila de espera (Sync Queue). *(Origen: decisión de arquitectura del equipo para resolver conflictos de sincronización)*
 
-## Restricciones Organizacionales y de Proyecto:
+## Restricciones Organizacionales y de Proyecto
 
 - **RO-01 (Límite Semestral y Equipo):** El desarrollo está limitado al alcance de un semestre académico y lo hace un equipo de estudiantes. Por eso el primer incremento del proyecto se enfoca solo en el módulo A-01 (recepción y procesamiento de notificaciones). *(Origen: limitación de tiempo y tamaño del equipo, propia del curso académico)*
 
@@ -92,7 +92,7 @@ Estas son las condiciones que ya vienen dadas para el proyecto y que no podemos 
 
 # Context and Scope
 
-## Business Context 
+## Business Context
 
 Aquí se muestra quién o qué interactúa con XALD desde afuera, sin entrar en detalles técnicos de cómo se comunican. Esta tabla está alineada con el diagrama de Contexto (C1) del modelo C4: solo se listan los actores y sistemas que están fuera de la frontera del sistema XALD.
 
@@ -105,7 +105,6 @@ Aquí se muestra quién o qué interactúa con XALD desde afuera, sin entrar en 
 **Nota de alcance:** el Backend XALD se representa **dentro de la frontera del sistema XALD** (subgrafo "Sistema XALD · Frontera del proyecto" en el C1), no como actor externo — por eso no tiene fila propia en la tabla de arriba. Con la actualización del diagrama, la conexión entre la Aplicación XALD y el Backend XALD ya aparece explícita dentro del propio C1 como el **conector 4 (Sincronización REST)**, aunque su función interna se sigue detallando a fondo en el nivel de Contenedores (C2). Ver `docs/c4/c4.md`.
 
 La idea central es que el usuario casi no tiene que hacer nada manualmente: el sistema capta la información sola desde los SMS bancarios, usa la IA de Gemini para sugerir la categoría del gasto, y el usuario solo interviene para revisar, corregir o consultar.
-
 
 ## Technical Context
 
@@ -145,7 +144,7 @@ El diagrama de contexto formal se encuentra en `docs/c4/c4.md`. Las interfaces m
 [Usuario final] <--3 · UI / Reportes--> [Aplicación XALD]
 ```
 
-# Solution Strategy 
+# Solution Strategy
 
 Ideas principales y enfoques de solución que definen cómo XALD resuelve el problema. Las herramientas que se mencionan más adelante son solo ejemplos de cómo se podría implementar cada idea, no una decisión cerrada; se pueden cambiar según lo que mejor funcione en el momento.
 
@@ -400,57 +399,23 @@ sequenceDiagram
 
 **Aspectos notables:** este escenario verifica directamente la restricción RL-01 (Habeas Data) y RT-03 — la seguridad no depende de ocultar el archivo, sino de que sea inútil sin la llave, que es la práctica correcta de cifrado en reposo.
 
-# Deployment View {#section-deployment-view}
+# Deployment View
 
-## Infrastructure Level 1 {#_infrastructure_level_1}
+# Cross-cutting Concepts
 
-***\<Overview Diagram\>***
+## Offline-First como principio transversal
 
-Motivation
+No es una decisión de un solo módulo — atraviesa `:corefinanciero` (que es la fuente primaria de verdad, no una caché), `:syncqueue` (que asume que la red puede no estar disponible en cualquier momento) y `:app` (que nunca debe mostrarle al usuario un error de red al registrar un gasto). Cualquier módulo nuevo que se agregue al proyecto debe respetar esta misma regla: nada puede depender de tener conexión para funcionar. *(Ver RT-02, ADR-0001, ESC-01)*
 
-:   *\<explanation in text form\>*
+## Cifrado y protección de datos
 
-Quality and/or Performance Features
+El cifrado con AES-256 y Android Keystore no vive en un solo lugar: protege los datos en reposo dentro de `:corefinanciero`, y se combina con TLS 1.3 para protegerlos en tránsito hacia `:aigemini` y hacia el Backend XALD. Cualquier dato financiero que se mueva entre módulos o hacia afuera del sistema debe pasar por alguna de estas dos capas de protección. *(Ver RT-03, RL-01, ADR-0004, ESC-04)*
 
-:   *\<explanation in text form\>*
+## Manejo de errores no bloqueante
 
-Mapping of Building Blocks to Infrastructure
+Ningún fallo externo puede impedir que una transacción se guarde. Si `:aigemini` no responde, `:parser` guarda igual la transacción como "Sin Categorizar" en `:corefinanciero`; si no hay conexión, `:syncqueue` simplemente encola el envío para más adelante. Este principio — nunca bloquear el registro por un fallo ajeno al propio dispositivo — se repite en más de un escenario de calidad y debería aplicarse a cualquier integración externa que se agregue en el futuro. *(Ver ESC-01, ESC-02)*
 
-:   *\<description of the mapping\>*
-
-## Infrastructure Level 2 {#_infrastructure_level_2}
-
-### *\<Infrastructure Element 1\>* {#_infrastructure_element_1}
-
-*\<diagram + explanation\>*
-
-### *\<Infrastructure Element 2\>* {#_infrastructure_element_2}
-
-*\<diagram + explanation\>*
-
-...​
-
-### *\<Infrastructure Element n\>* {#_infrastructure_element_n}
-
-*\<diagram + explanation\>*
-
-# Cross-cutting Concepts {#section-concepts}
-
-## *\<Concept 1\>* {#_concept_1}
-
-*\<explanation\>*
-
-## *\<Concept 2\>* {#_concept_2}
-
-*\<explanation\>*
-
-...​
-
-## *\<Concept n\>* {#_concept_n}
-
-*\<explanation\>*
-
-# Architecture Decisions 
+# Architecture Decisions
 
 Las decisiones arquitectónicas del proyecto se registran como ADR (Architecture Decision Record) individuales en `docs/adr/`, siguiendo la convención de nombre `NNNN-titulo-en-kebab-case.md`. Cada decisión responde a un objetivo de negocio o de calidad de la Sección 1, y varias se verifican mediante los escenarios de calidad de la Sección 10.
 
@@ -463,11 +428,11 @@ Las decisiones arquitectónicas del proyecto se registran como ADR (Architecture
 | [ADR-0005](../adr/0005-reduccion-de-funcionalidades.md) | Alcance Reducido en el Módulo de Analítica y Reportes (MVP) | Reducir el módulo de reportes a lo esencial (saldos consolidados, gráficos básicos, lista de movimientos), dejando fuera el motor avanzado de analítica y predicción. | RO-01 |
 | [ADR-0006](../adr/0006-seleccion-de-estilo-arquitectonico.md) | Selección de Estilo Arquitectónico — Monolito Modular | Adoptar un monolito modular organizado por paquetes de dominio (`parser`, `corefinanciero`, `syncqueue`, `aigemini`), en vez de arquitectura por capas o hexagonal. | RO-01 · Objetivo de calidad 5 (Modificabilidad) |
 
-# Quality Requirements {#section-quality-scenarios}
+# Quality Requirements
 
 Esta sección desarrolla los 5 objetivos de calidad definidos en la Sección 1 (Disponibilidad, Resiliencia, Seguridad básica, Consistencia eventual y Modificabilidad). Primero se muestra el árbol de utilidad, que los prioriza según su impacto en el negocio y su riesgo técnico, y después los 5 escenarios de calidad (ESC-01 a ESC-05) que los hacen medibles, cada uno enlazado a su objetivo de negocio y a la restricción arquitectónica que lo origina.
 
-## Quality Scenarios {#_quality_scenarios}
+## Quality Scenarios
 
 Cada escenario sigue las seis partes que exige arc42: fuente, estímulo, artefacto, entorno, respuesta y medida de respuesta. Cada medida declara explícitamente su umbral, la carga bajo la cual se evalúa y la herramienta de verificación.
 
@@ -536,7 +501,7 @@ Cada escenario sigue las seis partes que exige arc42: fuente, estímulo, artefac
 
 **Objetivo de calidad:** 4 (Consistencia eventual) · **Objetivo de negocio:** OB-02 · **Restricción:** RT-05
 
-## Árbol de utilidad {#_quality_requirements_overview}
+## Árbol de utilidad
 
 Notación: **(Impacto en el negocio, Riesgo técnico)** en escala Alto / Medio / Bajo.
 
@@ -571,9 +536,23 @@ Utilidad del sistema XALD
 
 Los escenarios calificados **(A, A)** y **(A, M)** son los que condicionan las decisiones arquitectónicas registradas en los ADR.
 
-# Risks and Technical Debts {#section-technical-risks}
+# Risks and Technical Debts
 
-# Glossary 
+Esta sección consolida los riesgos y deudas técnicas que ya quedaron documentados individualmente en cada ADR (Sección 9) y en la Sección 6.
+
+| Riesgo / Deuda técnica | Origen | Mitigación actual |
+| --- | --- | --- |
+| Complejidad adicional por el motor de resolución de conflictos (LWW), validación redundante y manejo de colas de sincronización | ADR-0001 | Asumida como costo necesario del enfoque Offline-First; se verifica con ESC-05 |
+| Vulnerabilidad ante *phishing* (SMS falsos procesados como compras reales) y mensajes que Regex no logra leer | ADR-0002 | Ninguna formalizada todavía — pendiente de definir cómo se detecta un SMS fraudulento |
+| Necesidad de mantenimiento continuo si un banco cambia el formato de sus mensajes | ADR-0002 | Mitigado en parte por el registro de reglas modular (ver ESC-03); sigue siendo trabajo manual del equipo |
+| Incompatibilidad absoluta con dispositivos iOS | ADR-0003 | Aceptada como restricción permanente del alcance (RT-01), no hay mitigación planeada |
+| El sistema no soporta ataques avanzados a gran escala ni alta concurrencia masiva | ADR-0004 | Aceptada porque el alcance actual es solo grupos reducidos de prueba |
+| Menor profundidad en el análisis financiero avanzado para el usuario final | ADR-0005 | Aceptada como parte del recorte a MVP; podría revisarse en una futura iteración |
+| Riesgo de acoplamiento indeseado entre paquetes por importación directa de clases | ADR-0006 | Mitigado con el modificador `internal` de Kotlin para los componentes que no son parte de la interfaz pública del módulo |
+| La reclasificación automática de transacciones "Sin Categorizar" (mencionada en ESC-02) depende de un componente que **todavía no está implementado** en el código | Sección 6 — Runtime View | Sin mitigación todavía; queda pendiente de diseño e implementación |
+| La resolución de conflictos entre dispositivos (ESC-05) depende de que los relojes de los dispositivos sean razonablemente confiables | Árbol de utilidad — Sección 10 | Ninguna formalizada; es el escenario de mayor riesgo técnico del proyecto (Riesgo: Alta) |
+
+# Glossary
 
 | Term | Definition |
 | --- | --- |
