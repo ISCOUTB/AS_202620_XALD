@@ -571,7 +571,7 @@ Utilidad del sistema XALD
 
 Los escenarios calificados **(A, A)** y **(A, M)** son los que condicionan las decisiones arquitectónicas registradas en los ADR.
 
-# Risks and Technical Debts {#section-technical-risks}
+# Risks and Technical Debts 
 
 Esta sección consolida los riesgos y deudas técnicas que ya quedaron documentados individualmente en cada ADR (Sección 9) y en la Sección 6 
 
