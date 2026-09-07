@@ -436,19 +436,17 @@ Mapping of Building Blocks to Infrastructure
 
 # Cross-cutting Concepts {#section-concepts}
 
-## *\<Concept 1\>* {#_concept_1}
+## Offline-First como principio transversal
 
-*\<explanation\>*
+No es una decisión de un solo módulo — atraviesa `:corefinanciero` (que es la fuente primaria de verdad, no una caché), `:syncqueue` (que asume que la red puede no estar disponible en cualquier momento) y `:app` (que nunca debe mostrarle al usuario un error de red al registrar un gasto). Cualquier módulo nuevo que se agregue al proyecto debe respetar esta misma regla: nada puede depender de tener conexión para funcionar. *(Ver RT-02, ADR-0001, ESC-01)*
 
-## *\<Concept 2\>* {#_concept_2}
+## Cifrado y protección de datos
 
-*\<explanation\>*
+El cifrado con AES-256 y Android Keystore no vive en un solo lugar: protege los datos en reposo dentro de `:corefinanciero`, y se combina con TLS 1.3 para protegerlos en tránsito hacia `:aigemini` y hacia el Backend XALD. Cualquier dato financiero que se mueva entre módulos o hacia afuera del sistema debe pasar por alguna de estas dos capas de protección. *(Ver RT-03, RL-01, ADR-0004, ESC-04)*
 
-...​
+## Manejo de errores no bloqueante
 
-## *\<Concept n\>* {#_concept_n}
-
-*\<explanation\>*
+Ningún fallo externo puede impedir que una transacción se guarde. Si `:aigemini` no responde, `:parser` guarda igual la transacción como "Sin Categorizar" en `:corefinanciero`; si no hay conexión, `:syncqueue` simplemente encola el envío para más adelante. Este principio — nunca bloquear el registro por un fallo ajeno al propio dispositivo — se repite en más de un escenario de calidad y debería aplicarse a cualquier integración externa que se agregue en el futuro. *(Ver ESC-01, ESC-02)*
 
 # Architecture Decisions 
 
