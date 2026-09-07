@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 
 class Entornotest{
     @Test
-    fun el_entorno_base_del_monolito_modular_compila_correctamente() {
+    fun elEntornoBaseDelMonolitoModularCompilaCorrectamente() {
         val sistemaConfigurado = true
         assertTrue(sistemaConfigurado)
     }
