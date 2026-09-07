@@ -32,9 +32,9 @@ Como parte de esta misma estrategia de captura, el equipo evaluó también sopor
 * *Restricciones relacionadas:* RT-04 (Ingesta por inferencia/Regex).
 * *Escenarios de calidad relacionados:* ESC-03 (Incorporación de una nueva entidad bancaria).
 * *Diagrama C4 relacionado:* C1 — Contexto (`docs/c4/c4.md`).
+* *Módulos de código relacionados:* `:parser` (`Parser.kt`, motor Regex), `:aigemini` (`Geminiproc.kt`, pre-limpieza de casos ambiguos).
+* *ADR relacionado:* ADR-0003 (comparte el aspecto A-01, ya que ambos sustentan la captura pasiva por SMS).
 
 **Trazabilidad y Línea Base:**
 * **Versión:** Corte 1 (corte-1)
 * **Tag:** [corte-1](https://github.com/ISCOUTB/AS_202620_XALD/releases/tag/corte-1)
-* *Módulos de código relacionados:* `:parser` (`Parser.kt`, motor Regex), `:aigemini` (`Geminiproc.kt`, pre-limpieza de casos ambiguos).
-* *ADR relacionado:* ADR-0003 (comparte el aspecto A-01, ya que ambos sustentan la captura pasiva por SMS).
