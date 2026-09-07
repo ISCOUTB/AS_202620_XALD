@@ -434,8 +434,7 @@ Mapping of Building Blocks to Infrastructure
 
 *\<diagram + explanation\>*
 
-# Cross-cutting Concepts {#section-concepts}
-
+# Cross-cutting Concepts
 ## Offline-First como principio transversal
 
 No es una decisión de un solo módulo — atraviesa `:corefinanciero` (que es la fuente primaria de verdad, no una caché), `:syncqueue` (que asume que la red puede no estar disponible en cualquier momento) y `:app` (que nunca debe mostrarle al usuario un error de red al registrar un gasto). Cualquier módulo nuevo que se agregue al proyecto debe respetar esta misma regla: nada puede depender de tener conexión para funcionar. *(Ver RT-02, ADR-0001, ESC-01)*
