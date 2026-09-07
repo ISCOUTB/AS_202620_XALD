@@ -79,7 +79,7 @@ Todos los hallazgos de estas semanas están resueltos. No quedan puntos abiertos
 
 Varios hallazgos de la semana 4 corresponden a puntos marcados como no declarados o no documentados que sí están detallados en la documentación del repositorio. El calificador automático operó de forma independiente a las pruebas reales del proyecto y no reflejó el estado efectivo de la entrega.
 
-Se solicita revisión manual de esos puntos, dado que el resultado de una verificación automática defectuosa está afectando directamente la calificación de trabajo que sí fue realizado y entregado dentro del plazo.
+Se solicita revisión manual de esos puntos, dado que las limitaciones del script de calificación para interpretar esta estructura modular están afectando directamente la calificación de trabajo que sí fue realizado y entregado dentro del plazo.
 
 Adicionalmente, y en caso de que sea posible y válido dentro de los criterios del curso, se solicita extender esa verificación manual a **las semanas 1 a 3**. Sobre esas entregas se aplicaron todas las modificaciones señaladas en el feedback, con el propósito de que la documentación quedara correctamente fundamentada: los objetivos de negocio y su vínculo con los interesados, la clasificación y el origen de las restricciones, los escenarios de calidad con sus seis partes y medidas verificables, el árbol de utilidad, el diagrama C4 con su leyenda y la trazabilidad completa desde la tabla de aspectos hasta los ADR.
 
