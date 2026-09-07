@@ -29,3 +29,7 @@ Limitar el alcance arquitectónico del cliente exclusivamente al ecosistema **An
 * *Diagrama C4 relacionado:* C1 — Contexto (`docs/c4/c4.md`).
 * *Módulos de código relacionados:* `:parser` (depende de `BroadcastReceiver`, exclusivo de Android).
 * *ADR relacionado:* ADR-0002 (comparte el aspecto A-01, ya que ambos sustentan la captura pasiva por SMS).
+
+**Trazabilidad y Línea Base:**
+* **Versión:** Corte 1 (corte-1)
+* **Tag:** [corte-1](https://github.com/ISCOUTB/AS_202620_XALD/releases/tag/corte-1)
