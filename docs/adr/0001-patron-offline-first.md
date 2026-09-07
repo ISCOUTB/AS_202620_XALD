@@ -1,6 +1,5 @@
 ## ADR-0001: Adopción de Patrón de Arquitectura Offline-First
 * *Estatus:* Aprobado
-* *Fecha:* *(completar con la fecha real de aprobación del equipo)*
 * *Proyecto:* XALDAPP — Aplicación de gestión financiera
 
 ## Contexto y Problema
