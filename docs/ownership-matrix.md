@@ -1,9 +1,8 @@
 # Matriz de Propiedad de Datos (Ownership Matrix)
 
-**Validación:**
+
 **Fecha:** 2026-09-13  
-**Rama:** experimental  
-**Responsable:** Auditoría S6
+**ISSUE:** Auditoría S6
 
 ---
 
