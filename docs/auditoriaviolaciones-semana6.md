@@ -3,7 +3,7 @@
 - **Proyecto:** XALD Application (Android / Kotlin)
 - **Fecha de Cierre:** 2026-09-13
 - **Commit Base (Auditado):** `a95c3c61022413ddbaae2e680e5836109d269f45`
-- **Commit Vigente (Corregido):** `7c375ef345298dbc0f73301f1989c6bd15121eb4`
+- **Commit Vigente (Corregido):** `9f016052ea03cc7e828907a9b8304a7d82dda3c9`
 - **Criterio de Validación:** Cobertura 100% en `CorteVerticalTest.kt` ejecutable en CI/CD.
 
 ## Matriz de Hallazgos y Correcciones
