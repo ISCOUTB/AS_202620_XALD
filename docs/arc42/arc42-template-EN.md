@@ -188,19 +188,17 @@ Vista de caja blanca del sistema completo: dentro de la frontera "Sistema XALD" 
 
 Descomposición del contenedor "Aplicación Móvil Android" en sus módulos internos, tal como aparecen en el C2: el módulo `:app` actúa como orquestador central y delega en cuatro submódulos independientes. La tabla incluye además su correspondencia con el esqueleto de código ya escrito.
 
-| Módulo (C2) | Función | Carpeta en el esqueleto |
-| :--- | :--- | :--- |
-| **`:app`** | Interfaz gráfica (Jetpack Compose), Dashboard y orquestador principal | `modules/ui/` (`UiModule`) + `Bootstrapper.kt` |
-| **`:parser`** | Receptor de eventos (BroadcastReceiver) y motor de expresiones regulares (Regex Engine) | `modules/parser/` (`ParserModule`) |
-| **`:corefinanciero`** | Almacenamiento local cifrado (SQLite/Room con AES-256) | `modules/database/` (`DatabaseModule`) |
-| **`:syncqueue`** | Gestor de la cola de sincronización asíncrona (timestamps + UUIDs) | `modules/sync/` (`SyncModule`) |
-| **`:aigemini`** | Cliente HTTP y SDK de Google Gemini para categorización de comercios | *pendiente de separar — hoy vive como `TODO` dentro de `ParserModule`* |
+| Módulo (C2) | Función | Carpeta en el esqueleto | Módulo de Inicialización |
+| :--- | :--- | :--- | :--- |
+| **`:app`** | Interfaz gráfica (Jetpack Compose), Dashboard y orquestador principal | `modules/app/` | `UiModule` / `AppModule` |
+| **`:parser`** | Receptor de eventos (BroadcastReceiver) y motor de expresiones regulares (Regex Engine) | `modules/parser/` | `ParserModule` |
+| **`:aigemini`** | Cliente HTTP y SDK de Google Gemini para categorización de comercios (ACL) | `modules/aigemini/` | `AiGeminiModule` |
+| **`:corefinanciero`** | Almacenamiento local cifrado (SQLite/Room con AES-256) | `modules/corefinanciero/` | `CoreFinancieroModule` |
+| **`:syncqueue`** | Gestor de la cola de sincronización asíncrona (timestamps + UUIDs) | `modules/syncqueue/` | `SyncQueueModule` |
 
-El orden de arranque definido en `Bootstrapper.kt` respeta esta misma descomposición: `DatabaseModule → CaptureModule → ParserModule → SyncModule → UiModule`. Cada módulo implementa el contrato `AppModule` (con un único método `init()`), lo que permite que el `Bootstrapper` los trate a todos por igual sin conocer sus detalles internos, y que si uno falla, aísle el error sin tumbar el resto de la aplicación.
+El orden de arranque definido en `Bootstrapper.kt` respeta esta misma descomposición de 5 Bounded Contexts: `CoreFinancieroModule → ParserModule → AiGeminiModule → SyncQueueModule → UiModule`. Cada módulo implementa el contrato `AppModule` (con un único método `init()`), lo que permite que el `Bootstrapper` los trate a todos por igual sin conocer sus detalles internos, y que si uno falla, aísle el error sin tumbar el resto de la aplicación.
 
-**Ajuste de consistencia con el C2:** el esqueleto tenía previamente un módulo `RemoteDatabaseModule` dentro del arranque de la app. Con el C2 ya definido, ese bloque no corresponde al lado de la Aplicación Móvil — la persistencia remota vive dentro del contenedor **Backend XALD** (ver 5.1), y la app solo la alcanza a través de `:syncqueue` (conector 4). Por eso se retira del `Bootstrapper` de la app y queda documentada únicamente como responsabilidad del Backend XALD.
-
-**Pendiente para el próximo incremento:** separar el cliente de IA (`:aigemini`) de `ParserModule` en su propio módulo, para que el código refleje exactamente los cinco módulos del C2 en lugar de cuatro.
+**Ajuste de consistencia con el C2:** El esqueleto tenía previamente un módulo `RemoteDatabaseModule` dentro del arranque de la app. Con el C2 ya definido, ese bloque no corresponde al lado de la Aplicación Móvil — la persistencia remota vive dentro del contenedor **Backend XALD** (ver 5.1), y la app solo la alcanza a través de `:syncqueue`. Por eso se retira del `Bootstrapper` de la app y queda documentado únicamente como responsabilidad del Backend XALD.
 
 * **`:app` (Interfaz gráfica, Dashboard y orquestador principal):** implementado con Jetpack Compose; recibe el SMS del sistema operativo (conector 1) y coordina el resto de los módulos, además de exponer la UI y los reportes al usuario (conector 3).
 * **`:parser` (Receptor de eventos y motor de expresiones regulares):** su `BroadcastReceiver` capta el SMS entrante y su `Regex Engine` interpreta el texto con reglas locales conocidas, delegando en `:aigemini` los casos ambiguos.
