@@ -49,3 +49,6 @@ Para certificar que la eliminación de dependencias cruzadas no rompió la integ
 ### Cambios finales de comprobación y pulido 
 1. https://github.com/ISCOUTB/AS_202620_XALD/commit/a6113e89f6e8a0880c5c3e21d4bd45fa41a4a50e
 2. https://github.com/ISCOUTB/AS_202620_XALD/commit/e21b1e6779655a336b063c89913e6e756f7e3632
+
+### Documento ampliado con toda la informacion pertinente y solicitada, fuera del arc42 y directorios en docs(adr, c4)
+- https://github.com/ISCOUTB/AS_202620_XALD/blob/experimental/docs/ownership-matrix.md
