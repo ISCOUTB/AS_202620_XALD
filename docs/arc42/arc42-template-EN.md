@@ -190,11 +190,11 @@ Descomposición del contenedor "Aplicación Móvil Android" en sus módulos inte
 
 | Módulo (C2) | Función | Carpeta en el esqueleto | Módulo de Inicialización |
 | :--- | :--- | :--- | :--- |
-| **`:app`** | Interfaz gráfica (Jetpack Compose), Dashboard y orquestador principal | `modules/app/` | `UiModule` / `AppModule` |
-| **`:parser`** | Receptor de eventos (BroadcastReceiver) y motor de expresiones regulares (Regex Engine) | `modules/parser/` | `ParserModule` |
-| **`:aigemini`** | Cliente HTTP y SDK de Google Gemini para categorización de comercios (ACL) | `modules/aigemini/` | `AiGeminiModule` |
-| **`:corefinanciero`** | Almacenamiento local cifrado (SQLite/Room con AES-256) | `modules/corefinanciero/` | `CoreFinancieroModule` |
-| **`:syncqueue`** | Gestor de la cola de sincronización asíncrona (timestamps + UUIDs) | `modules/syncqueue/` | `SyncQueueModule` |
+| **`:app`** | Interfaz gráfica (Jetpack Compose), Dashboard y orquestador principal | `XALDAPP/app/` | `XaldApplication` |
+| **`:parser`** | Receptor de eventos (BroadcastReceiver) y motor de expresiones regulares (Regex Engine) | `XALDAPP/parser/` | `ParserModule` |
+| **`:aigemini`** | Cliente HTTP y SDK de Google Gemini para categorización de comercios (ACL) | `XALDAPP/aigemini/` | `AiGeminiModule` |
+| **`:corefinanciero`** | Almacenamiento local cifrado (SQLite/Room con AES-256) | `XALDAPP/corefinanciero/` | `CoreFinancieroModule` |
+| **`:syncqueue`** | Gestor de la cola de sincronización asíncrona (timestamps + UUIDs) | `XALDAPP/syncqueue/` | `SyncQueueModule` |
 
 El orden de arranque definido en `Bootstrapper.kt` respeta esta misma descomposición de 5 Bounded Contexts: `CoreFinancieroModule → ParserModule → AiGeminiModule → SyncQueueModule → UiModule`. Cada módulo implementa el contrato `AppModule` (con un único método `init()`), lo que permite que el `Bootstrapper` los trate a todos por igual sin conocer sus detalles internos, y que si uno falla, aísle el error sin tumbar el resto de la aplicación.
 
