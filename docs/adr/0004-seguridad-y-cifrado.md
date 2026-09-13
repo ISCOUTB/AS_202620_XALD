@@ -29,3 +29,7 @@ Centrar la estrategia de seguridad exclusivamente en dos capas: **cifrado local 
 * *Escenarios de calidad relacionados:* ESC-04 (Protección de la información almacenada).
 * *Diagrama C4 relacionado:* C1 — Contexto (`docs/c4/c4.md`).
 * *Módulos de código relacionados:* `:corefinanciero` (cifrado de la base de datos local), comunicación `:syncqueue` ↔ Backend XALD (cifrado en tránsito).
+  
+**Trazabilidad y Línea Base:**
+* **Versión:** Corte 1 (corte-1)
+* **Tag:** [corte-1](https://github.com/ISCOUTB/AS_202620_XALD/releases/tag/corte-1)

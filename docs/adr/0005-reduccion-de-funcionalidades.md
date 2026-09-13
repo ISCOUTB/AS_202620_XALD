@@ -30,3 +30,7 @@ Reducir la complejidad de la interfaz gráfica y de los reportes en el backend p
 * *Escenarios de calidad relacionados:* sin escenario medible asociado en este corte, al no tratarse todavía de un aspecto activo.
 * *Diagrama C4 relacionado:* no aplica en este corte — el módulo de analítica/reportes vive conceptualmente en el Backend XALD, cuyo detalle de contenedores está pendiente.
 * *Nota:* al completarse este ADR con una fecha y quedar fuera de revisión, debe evaluarse si corresponde crear un aspecto nuevo en `docs/aspectos.md` que lo referencie.
+
+**Trazabilidad y Línea Base:**
+* **Versión:** Corte 1 (corte-1)
+* **Tag:** [corte-1](https://github.com/ISCOUTB/AS_202620_XALD/releases/tag/corte-1)

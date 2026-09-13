@@ -169,18 +169,18 @@ La vista de bloques de construcción muestra la descomposición de XALD en dos n
 
 ### 5.1 Nivel 1 — Sistema XALD (corresponde al C1 de `docs/c4/c4.md`)
 
-Vista de caja blanca del sistema completo: dentro de la frontera "Sistema XALD" conviven dos contenedores, la **Aplicación XALD** y el **Backend XALD**, conectados por el **conector 4 (Sincronización REST)**. Ambos son necesarios para completar el ciclo de vida de una transacción, pero solo la Aplicación XALD es visible directamente para el usuario (conector 3) y solo ella recibe las notificaciones bancarias (conector 1) y consulta la IA (conector 2).
+Vista de caja blanca del sistema completo: dentro de la frontera "Sistema XALD" conviven dos contenedores principales: la **Aplicación Móvil XALD** y el **Backend XALD**, conectados a través del **conector 4 (Sincronización REST / TLS 1.3)**. Ambos completan el ciclo de vida de una transacción, siendo la Aplicación Móvil el único contenedor con el que el usuario interactúa directamente (conector 3), el que recepta notificaciones bancarias (conector 1) y el que consulta la API externa de IA (conector 2).
 
-| 1. Aplicación XALD | 2. Backend XALD |
+| 1. Aplicación Móvil XALD (Contenedor Android) | 2. Backend XALD (Contenedor Servidor) |
 | :--- | :--- |
-| • Ingesta de notificaciones/SMS (`:parser`) | • Servidor API REST |
-| • Parseo local (Regex) + inferencia IA (`:parser` + `:aigemini`) | • Procesamiento de reportes |
-| • Base de datos local cifrada (`:corefinanciero`) | • Motor de sincronización (LWW) |
-| • Cola de sincronización offline (`:syncqueue`) | • Persistencia remota (respaldo) |
-| • UI / Gestión financiera (`:app`) | |
+| • Ingesta e interpretación de SMS (`:parser` - `ParseoSms`) | • Servidor API REST / Endpoints HTTP |
+| • Categorización inteligente via IA (`:aigemini` - `CategorizadorGemini`) | • Procesamiento y consolidación de reportes |
+| • Base de datos local cifrada AES-256 (`:corefinanciero` - `TransaccionEntidad`) | • Motor de resolución de conflictos de sincronización (LWW) |
+| • Gestor de cola offline en tránsito (`:syncqueue` - `ColaSincronizacion`) | • Persistencia remota (Base de Datos PostgreSQL / Respaldo) |
+| • Interfaz de usuario y orquestación (`:app` - Jetpack Compose) | |
 
-1. **Aplicación XALD:** captura, procesa y presenta la información financiera del usuario de forma local: ingesta de notificaciones bancarias, parseo con expresiones regulares con apoyo de IA para los casos ambiguos, almacenamiento cifrado y la interfaz de gestión financiera.
-2. **Backend XALD:** expone la API REST, procesa reportes y ejecuta la sincronización de datos entre dispositivos mediante *Last-Write-Wins* (LWW), manteniendo la persistencia remota como respaldo consolidado.
+1. **Aplicación Móvil XALD:** Captura, procesa y presenta la información financiera de forma local bajo un esquema *Offline-First*. Se encarga de la ingesta de SMS, el parseo por expresiones regulares, la categorización adaptativa con IA, la persistencia cifrada (AES-256) en `SQLite/Room` y la interfaz de gestión.
+2. **Backend XALD:** Expone la API REST protegida por TLS 1.3, procesa reportes globales y ejecuta la sincronización de datos entre dispositivos mediante la estrategia *Last-Write-Wins* (LWW), manteniendo la persistencia remota como respaldo consolidado del usuario..
 
 ---
 
@@ -188,19 +188,17 @@ Vista de caja blanca del sistema completo: dentro de la frontera "Sistema XALD" 
 
 Descomposición del contenedor "Aplicación Móvil Android" en sus módulos internos, tal como aparecen en el C2: el módulo `:app` actúa como orquestador central y delega en cuatro submódulos independientes. La tabla incluye además su correspondencia con el esqueleto de código ya escrito.
 
-| Módulo (C2) | Función | Carpeta en el esqueleto |
-| :--- | :--- | :--- |
-| **`:app`** | Interfaz gráfica (Jetpack Compose), Dashboard y orquestador principal | `modules/ui/` (`UiModule`) + `Bootstrapper.kt` |
-| **`:parser`** | Receptor de eventos (BroadcastReceiver) y motor de expresiones regulares (Regex Engine) | `modules/parser/` (`ParserModule`) |
-| **`:corefinanciero`** | Almacenamiento local cifrado (SQLite/Room con AES-256) | `modules/database/` (`DatabaseModule`) |
-| **`:syncqueue`** | Gestor de la cola de sincronización asíncrona (timestamps + UUIDs) | `modules/sync/` (`SyncModule`) |
-| **`:aigemini`** | Cliente HTTP y SDK de Google Gemini para categorización de comercios | *pendiente de separar — hoy vive como `TODO` dentro de `ParserModule`* |
+| Módulo (C2) | Función | Carpeta en el esqueleto | Módulo de Inicialización |
+| :--- | :--- | :--- | :--- |
+| **`:app`** | Interfaz gráfica (Jetpack Compose), Dashboard y orquestador principal | `modules/app/` | `UiModule` / `AppModule` |
+| **`:parser`** | Receptor de eventos (BroadcastReceiver) y motor de expresiones regulares (Regex Engine) | `modules/parser/` | `ParserModule` |
+| **`:aigemini`** | Cliente HTTP y SDK de Google Gemini para categorización de comercios (ACL) | `modules/aigemini/` | `AiGeminiModule` |
+| **`:corefinanciero`** | Almacenamiento local cifrado (SQLite/Room con AES-256) | `modules/corefinanciero/` | `CoreFinancieroModule` |
+| **`:syncqueue`** | Gestor de la cola de sincronización asíncrona (timestamps + UUIDs) | `modules/syncqueue/` | `SyncQueueModule` |
 
-El orden de arranque definido en `Bootstrapper.kt` respeta esta misma descomposición: `DatabaseModule → CaptureModule → ParserModule → SyncModule → UiModule`. Cada módulo implementa el contrato `AppModule` (con un único método `init()`), lo que permite que el `Bootstrapper` los trate a todos por igual sin conocer sus detalles internos, y que si uno falla, aísle el error sin tumbar el resto de la aplicación.
+El orden de arranque definido en `Bootstrapper.kt` respeta esta misma descomposición de 5 Bounded Contexts: `CoreFinancieroModule → ParserModule → AiGeminiModule → SyncQueueModule → UiModule`. Cada módulo implementa el contrato `AppModule` (con un único método `init()`), lo que permite que el `Bootstrapper` los trate a todos por igual sin conocer sus detalles internos, y que si uno falla, aísle el error sin tumbar el resto de la aplicación.
 
-**Ajuste de consistencia con el C2:** el esqueleto tenía previamente un módulo `RemoteDatabaseModule` dentro del arranque de la app. Con el C2 ya definido, ese bloque no corresponde al lado de la Aplicación Móvil — la persistencia remota vive dentro del contenedor **Backend XALD** (ver 5.1), y la app solo la alcanza a través de `:syncqueue` (conector 4). Por eso se retira del `Bootstrapper` de la app y queda documentada únicamente como responsabilidad del Backend XALD.
-
-**Pendiente para el próximo incremento:** separar el cliente de IA (`:aigemini`) de `ParserModule` en su propio módulo, para que el código refleje exactamente los cinco módulos del C2 en lugar de cuatro.
+**Ajuste de consistencia con el C2:** El esqueleto tenía previamente un módulo `RemoteDatabaseModule` dentro del arranque de la app. Con el C2 ya definido, ese bloque no corresponde al lado de la Aplicación Móvil — la persistencia remota vive dentro del contenedor **Backend XALD** (ver 5.1), y la app solo la alcanza a través de `:syncqueue`. Por eso se retira del `Bootstrapper` de la app y queda documentado únicamente como responsabilidad del Backend XALD.
 
 * **`:app` (Interfaz gráfica, Dashboard y orquestador principal):** implementado con Jetpack Compose; recibe el SMS del sistema operativo (conector 1) y coordina el resto de los módulos, además de exponer la UI y los reportes al usuario (conector 3).
 * **`:parser` (Receptor de eventos y motor de expresiones regulares):** su `BroadcastReceiver` capta el SMS entrante y su `Regex Engine` interpreta el texto con reglas locales conocidas, delegando en `:aigemini` los casos ambiguos.
@@ -402,7 +400,51 @@ sequenceDiagram
 # Deployment View
 
 # Cross-cutting Concepts
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>Cross-Cutting Concepts</h1>
+<h2>Context Map</h2>
+<p>Cada módulo del proyecto es un contexto delimitado: tiene su propia responsabilidad y su propio vocabulario, y no debe meterse en el trabajo del contexto vecino.</p>
 
+Módulo | Contexto | Responsabilidad
+-- | -- | --
+:app | Presentación | Interfaz gráfica (Jetpack Compose), orquesta las llamadas a los demás módulos y muestra saldo/reportes al usuario.
+:parser | Ingesta | Recibe el SMS crudo del sistema operativo y lo interpreta con el Motor de Parseo (Regex).
+:aigemini | Categorización | Traduce la respuesta de la API externa de Gemini al formato de dominio propio del proyecto.
+:corefinanciero | Núcleo Financiero | Dueño único de la transacción persistida; expone su interfaz pública para que los demás la consulten.
+:syncqueue | Sincronización | Gestiona la cola de transacciones pendientes y coordina con el Backend XALD.
+Backend XALD | Externo | Vive fuera de los módulos Gradle del cliente. Recibe los lotes de :syncqueue vía REST/HTTPS.
+
+
+<h2>Link to Quality Attributes (ver <code>docs/aspectos.md</code>)</h2>
+<ul>
+<li><strong>Offline-First:</strong> <code>TransaccionEntidad</code> es la fuente primaria de verdad — se escribe primero de forma local. <code>ColaSincronizacion</code> garantiza que ninguna transacción se pierda mientras no hay conexión (aspecto A-01).</li>
+<li><strong>Cifrado AES-256:</strong> se aplica sobre <code>TransaccionEntidad</code>, protegiendo los datos financieros en reposo dentro de <code>:corefinanciero</code>.</li>
+<li><strong>TLS 1.3:</strong> protege la comunicación en tránsito en dos puntos: <code>ColaSincronizacion</code> hacia el Backend XALD, y <code>CategorizadorGemini</code> hacia la API externa de Gemini.</li>
+</ul></body></html><!--EndFragment-->
+</body>
+</html>
+
+### Diccionario de Lenguaje Ubicuo
+
+| Término (ES)              | Módulo (Contexto)         | Tipo                    | Significado                                                                                     |
+|----------------------------|----------------------------|-------------------------|--------------------------------------------------------------------------------------------------|
+| `TransaccionProcesadaDTO`  | `:parser`                  | Dato en memoria (DTO)   | Objeto temporal que representa una transacción ya interpretada por el Motor de Parseo, antes de ser persistida. No tiene identidad de base de datos. |
+| `ParseoSms`                | `:parser`                  | Componente (Regex)      | Componente interno del contexto de Ingesta que aplica expresiones regulares al SMS crudo del sistema operativo para extraer los datos de la transacción. |
+| `CategorizadorGemini`      | `:aigemini`                 | Traductor (ACL)         | Capa Anticorrupción que adapta la respuesta cruda de la API externa de Gemini al formato de dominio propio del proyecto, evitando que cambios externos rompan el resto de la app. |
+| `TransaccionEntidad`       | `:corefinanciero`          | Entidad persistida (BD) | Representación oficial y permanente de una transacción dentro de la base de datos local. Es la fuente primaria de verdad (offline-first) y sobre ella se aplica el cifrado AES-256. |
+| `InformacionFinanciera`    | `:corefinanciero`          | Interfaz pública        | Contrato que expone el Núcleo Financiero para que otros módulos (`:app`, `:syncqueue`) consulten o soliciten operaciones sobre las transacciones, sin acceder directamente a la base de datos. |
+| `ColaSincronizacion`       | `:syncqueue`                | Gestor (cola)           | Componente que administra las transacciones pendientes de enviar al Backend XALD, garantizando que ninguna se pierda mientras no hay conexión, y protege el envío con TLS 1.3. |
+
+### Tipos de Relación entre Contextos (DDD)
+
+| Origen              | Destino              | Tipo de Relación         | Justificación                                                                                     |
+|----------------------|------------------------|----------------------------|------------------------------------------------------------------------------------------------------|
+| `:parser`            | `:corefinanciero`      | Customer-Supplier          | `:parser` produce `TransaccionProcesadaDTO`, pero `:corefinanciero` lo convierte a `TransaccionEntidad` antes de persistirlo — hay traducción/mapeo, no un modelo compartido literal, así que no es Shared Kernel. |
+| `:aigemini`          | Gemini API (externo)   | Anti-Corruption Layer (ACL)| `CategorizadorGemini` traduce la respuesta cruda de la API externa al formato de dominio propio, evitando que cambios en Gemini afecten el resto del sistema. |
+| `:corefinanciero`    | `:app`                 | Customer-Supplier           | `:app` consulta el Núcleo Financiero a través de `InformacionFinanciera` (interfaz pública); depende del contrato que expone `:corefinanciero`. |
+| `:corefinanciero`    | `:syncqueue`           | Customer-Supplier           | `:syncqueue` lee las transacciones pendientes desde `:corefinanciero` a través de su interfaz pública para encolarlas y enviarlas. |
+| `:syncqueue`         | Backend XALD (externo) | Customer-Supplier           | `:syncqueue` envía lotes al Backend vía REST/HTTPS; el Backend es el proveedor externo del que depende la sincronización. |
 ## Offline-First como principio transversal
 
 No es una decisión de un solo módulo — atraviesa `:corefinanciero` (que es la fuente primaria de verdad, no una caché), `:syncqueue` (que asume que la red puede no estar disponible en cualquier momento) y `:app` (que nunca debe mostrarle al usuario un error de red al registrar un gasto). Cualquier módulo nuevo que se agregue al proyecto debe respetar esta misma regla: nada puede depender de tener conexión para funcionar. *(Ver RT-02, ADR-0001, ESC-01)*

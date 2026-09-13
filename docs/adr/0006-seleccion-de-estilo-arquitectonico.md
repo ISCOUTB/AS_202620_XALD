@@ -48,3 +48,8 @@ XALDAPP/
 ### Riesgos y Mitigación:
 * **Riesgo:** Mayor sobrecarga inicial por la administración de múltiples archivos `build.gradle.kts` y posible exposición de clases internas.
 * **Mitigación:** Centralización de dependencias (uso de Version Catalogs si aplica) y restricción de acceso mediante el uso del modificador de visibilidad `internal` en Kotlin, asegurando que solo se expongan los contratos y no la lógica de implementación de cada módulo.
+
+
+**Trazabilidad y Línea Base:**
+* **Versión:** Corte 1 (corte-1)
+* **Tag:** [corte-1](https://github.com/ISCOUTB/AS_202620_XALD/releases/tag/corte-1)
