@@ -1,6 +1,6 @@
 # Matriz de Propiedad de Datos (Ownership Matrix)
 
-**Validación:** Entidades de código (`commits a6113e8 y e21b1e6 `) vs. Documentación arc42  
+**Validación:**
 **Fecha:** 2026-09-13  
 **Rama:** experimental  
 **Responsable:** Auditoría S6
