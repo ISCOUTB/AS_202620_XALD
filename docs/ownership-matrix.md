@@ -145,10 +145,11 @@ Ubicación: `XALDAPP/app/src/test/java/com/proyecto/xald/Cortevertical.kt`
 
 - **Arc42 Sección 1 - Introducción:** https://github.com/ISCOUTB/AS_202620_XALD/blob/experimental/docs/arc42/arc42-template-EN.md#introduction-and-goals
 - **Arc42 Sección 8 - Conceptos Transversales:** https://github.com/ISCOUTB/AS_202620_XALD/blob/experimental/docs/arc42/arc42-template-EN.md#cross-cutting-concepts
-- **Commit de implementación:** https://github.com/ISCOUTB/AS_202620_XALD/commit/a6113e8
+- **Commits de implementación:** https://github.com/ISCOUTB/AS_202620_XALD/commit/a6113e8
+- https://github.com/ISCOUTB/AS_202620_XALD/commit/e21b1e6779655a336b063c89913e6e756f7e3632
 - **Auditoría de violaciones:** https://github.com/ISCOUTB/AS_202620_XALD/blob/experimental/docs/auditoriaviolaciones-semana6.md
 - **Aspectos arquitéctonicos:** https://github.com/ISCOUTB/AS_202620_XALD/blob/experimental/docs/aspectos.md
 
 ---
 
-**Conclusión:** ✅ La matriz de propiedad de datos está **validada contra el código** en commit `a6113e8`. Todas las 7 violaciones han sido corregidas. El test de integración vertical (`CorteVerticalTest`) pasa al 100%, confirmando que la arquitectura modular desacoplada funciona sin dependencias laterales.
+**Conclusión:** ✅ La matriz de propiedad de datos está **validada contra el código** en commit `a6113e8 y e21b1e6 `. Todas las 7 violaciones han sido corregidas. El test de integración vertical (`CorteVerticalTest`) pasa al 100%, confirmando que la arquitectura modular desacoplada funciona sin dependencias laterales.
