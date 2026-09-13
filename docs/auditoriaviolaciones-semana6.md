@@ -45,3 +45,7 @@ Para certificar que la eliminación de dependencias cruzadas no rompió la integ
 3. **`:corefinanciero`**: Registra y persiste el objeto en la entidad aislada `TransaccionEntidad` a través del contrato `InformacionFinanciera`.
 4. **`:corefinanciero` $\rightarrow$ `:syncqueue`**: Emite el DTO seguro `PayloadSincronizacionDTO` para ser encolado en `ColaSincronizacionService`.
 5. **`:app`**: Orquesta el flujo completo de principio a fin sin que los módulos tengan conocimiento interno unos de otros.
+
+### Cambios finales de comprobación y pulido 
+1. https://github.com/ISCOUTB/AS_202620_XALD/commit/a6113e89f6e8a0880c5c3e21d4bd45fa41a4a50e
+2. https://github.com/ISCOUTB/AS_202620_XALD/commit/e21b1e6779655a336b063c89913e6e756f7e3632
