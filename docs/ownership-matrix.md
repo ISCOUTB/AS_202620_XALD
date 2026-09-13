@@ -140,27 +140,8 @@ Ubicación: `XALDAPP/app/src/test/java/com/proyecto/xald/Cortevertical.kt`
    - V-04, V-05: `Coremanager` → `GestorCoreFinanciero` + `InformacionFinanciera` ✅
    - V-06, V-07: `SyncQueueManager` → `ColaSincronizacion` + `ColaSincronizacionService` ✅
 
-### ⚠️ Aspectos Pendientes de Validación
 
-1. **Verificación de modificadores `internal`:** Confirmar que `ParseoSms`, `CategorizadorGemini`, etc. declaran `internal class` en Kotlin (evita importación accidental).
-
-2. **Barrido de importaciones cruzadas:** Ejecutar:
-   ```bash
-   grep -r "import com.proyecto.xald.parser" XALDAPP/aigemini/
-   grep -r "import com.proyecto.xald.aigemini" XALDAPP/corefinanciero/
-   grep -r "import com.proyecto.xald.syncqueue" XALDAPP/parser/
-   ```
-
-3. **Validación de dependencias Gradle:** Confirmar que no hay imports laterales en:
-   - `parser/build.gradle.kts`
-   - `aigemini/build.gradle.kts`
-   - `corefinanciero/build.gradle.kts`
-
-4. **Escenario offline/sin conexión:** Verificar que `TransaccionEntidad` se persiste antes de intentar categorización (ESC-02).
-
----
-
-## 7. Referencias
+## 6. Referencias
 
 - **Arc42 Sección 1 - Introducción:** https://github.com/ISCOUTB/AS_202620_XALD/blob/experimental/docs/arc42/arc42-template-EN.md#introduction-and-goals
 - **Arc42 Sección 8 - Conceptos Transversales:** https://github.com/ISCOUTB/AS_202620_XALD/blob/experimental/docs/arc42/arc42-template-EN.md#cross-cutting-concepts
