@@ -169,18 +169,18 @@ La vista de bloques de construcción muestra la descomposición de XALD en dos n
 
 ### 5.1 Nivel 1 — Sistema XALD (corresponde al C1 de `docs/c4/c4.md`)
 
-Vista de caja blanca del sistema completo: dentro de la frontera "Sistema XALD" conviven dos contenedores, la **Aplicación XALD** y el **Backend XALD**, conectados por el **conector 4 (Sincronización REST)**. Ambos son necesarios para completar el ciclo de vida de una transacción, pero solo la Aplicación XALD es visible directamente para el usuario (conector 3) y solo ella recibe las notificaciones bancarias (conector 1) y consulta la IA (conector 2).
+Vista de caja blanca del sistema completo: dentro de la frontera "Sistema XALD" conviven dos contenedores principales: la **Aplicación Móvil XALD** y el **Backend XALD**, conectados a través del **conector 4 (Sincronización REST / TLS 1.3)**. Ambos completan el ciclo de vida de una transacción, siendo la Aplicación Móvil el único contenedor con el que el usuario interactúa directamente (conector 3), el que recepta notificaciones bancarias (conector 1) y el que consulta la API externa de IA (conector 2).
 
-| 1. Aplicación XALD | 2. Backend XALD |
+| 1. Aplicación Móvil XALD (Contenedor Android) | 2. Backend XALD (Contenedor Servidor) |
 | :--- | :--- |
-| • Ingesta de notificaciones/SMS (`:parser`) | • Servidor API REST |
-| • Parseo local (Regex) + inferencia IA (`:parser` + `:aigemini`) | • Procesamiento de reportes |
-| • Base de datos local cifrada (`:corefinanciero`) | • Motor de sincronización (LWW) |
-| • Cola de sincronización offline (`:syncqueue`) | • Persistencia remota (respaldo) |
-| • UI / Gestión financiera (`:app`) | |
+| • Ingesta e interpretación de SMS (`:parser` - `ParseoSms`) | • Servidor API REST / Endpoints HTTP |
+| • Categorización inteligente via IA (`:aigemini` - `CategorizadorGemini`) | • Procesamiento y consolidación de reportes |
+| • Base de datos local cifrada AES-256 (`:corefinanciero` - `TransaccionEntidad`) | • Motor de resolución de conflictos de sincronización (LWW) |
+| • Gestor de cola offline en tránsito (`:syncqueue` - `ColaSincronizacion`) | • Persistencia remota (Base de Datos PostgreSQL / Respaldo) |
+| • Interfaz de usuario y orquestación (`:app` - Jetpack Compose) | |
 
-1. **Aplicación XALD:** captura, procesa y presenta la información financiera del usuario de forma local: ingesta de notificaciones bancarias, parseo con expresiones regulares con apoyo de IA para los casos ambiguos, almacenamiento cifrado y la interfaz de gestión financiera.
-2. **Backend XALD:** expone la API REST, procesa reportes y ejecuta la sincronización de datos entre dispositivos mediante *Last-Write-Wins* (LWW), manteniendo la persistencia remota como respaldo consolidado.
+1. **Aplicación Móvil XALD:** Captura, procesa y presenta la información financiera de forma local bajo un esquema *Offline-First*. Se encarga de la ingesta de SMS, el parseo por expresiones regulares, la categorización adaptativa con IA, la persistencia cifrada (AES-256) en `SQLite/Room` y la interfaz de gestión.
+2. **Backend XALD:** Expone la API REST protegida por TLS 1.3, procesa reportes globales y ejecuta la sincronización de datos entre dispositivos mediante la estrategia *Last-Write-Wins* (LWW), manteniendo la persistencia remota como respaldo consolidado del usuario..
 
 ---
 
