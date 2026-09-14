@@ -190,15 +190,15 @@ Descomposición del contenedor "Aplicación Móvil Android" en sus módulos inte
 
 | Módulo (C2) | Función | Carpeta en el esqueleto | Módulo de Inicialización |
 | :--- | :--- | :--- | :--- |
-| **`:app`** | Interfaz gráfica (Jetpack Compose), Dashboard y orquestador principal | `modules/app/` | `UiModule` / `AppModule` |
-| **`:parser`** | Receptor de eventos (BroadcastReceiver) y motor de expresiones regulares (Regex Engine) | `modules/parser/` | `ParserModule` |
-| **`:aigemini`** | Cliente HTTP y SDK de Google Gemini para categorización de comercios (ACL) | `modules/aigemini/` | `AiGeminiModule` |
-| **`:corefinanciero`** | Almacenamiento local cifrado (SQLite/Room con AES-256) | `modules/corefinanciero/` | `CoreFinancieroModule` |
-| **`:syncqueue`** | Gestor de la cola de sincronización asíncrona (timestamps + UUIDs) | `modules/syncqueue/` | `SyncQueueModule` |
+| **`:app`** | Interfaz gráfica (Jetpack Compose), Dashboard y orquestador principal | `XALDAPP/app/` | `XaldApplication` |
+| **`:parser`** | Receptor de eventos (BroadcastReceiver) y motor de expresiones regulares (Regex Engine) | `XALDAPP/parser/` | `ParserModule` |
+| **`:aigemini`** | Cliente HTTP y SDK de Google Gemini para categorización de comercios (ACL) | `XALDAPP/aigemini/` | `AiGeminiModule` |
+| **`:corefinanciero`** | Almacenamiento local cifrado (SQLite/Room con AES-256) | `XALDAPP/corefinanciero/` | `CoreFinancieroModule` |
+| **`:syncqueue`** | Gestor de la cola de sincronización asíncrona (timestamps + UUIDs) | `XALDAPP/syncqueue/` | `SyncQueueModule` |
 
-El orden de arranque definido en `Bootstrapper.kt` respeta esta misma descomposición de 5 Bounded Contexts: `CoreFinancieroModule → ParserModule → AiGeminiModule → SyncQueueModule → UiModule`. Cada módulo implementa el contrato `AppModule` (con un único método `init()`), lo que permite que el `Bootstrapper` los trate a todos por igual sin conocer sus detalles internos, y que si uno falla, aísle el error sin tumbar el resto de la aplicación.
+El orden de arranque definido en `ProcesarNotificacionUseCase.kt` respeta esta misma descomposición de 5 Bounded Contexts: `CoreFinancieroModule → ParserModule → AiGeminiModule → SyncQueueModule → UiModule`. Cada módulo implementa el contrato `AppModule` (con un único método `init()`), lo que permite que el `ProcesarNotificacionUseCase` los trate a todos por igual sin conocer sus detalles internos, y que si uno falla, aísle el error sin tumbar el resto de la aplicación.
 
-**Ajuste de consistencia con el C2:** El esqueleto tenía previamente un módulo `RemoteDatabaseModule` dentro del arranque de la app. Con el C2 ya definido, ese bloque no corresponde al lado de la Aplicación Móvil — la persistencia remota vive dentro del contenedor **Backend XALD** (ver 5.1), y la app solo la alcanza a través de `:syncqueue`. Por eso se retira del `Bootstrapper` de la app y queda documentado únicamente como responsabilidad del Backend XALD.
+**Ajuste de consistencia con el C2:** El esqueleto tenía previamente un módulo `RemoteDatabaseModule` dentro del arranque de la app. Con el C2 ya definido, ese bloque no corresponde al lado de la Aplicación Móvil — la persistencia remota vive dentro del contenedor **Backend XALD** (ver 5.1), y la app solo la alcanza a través de `:syncqueue`. Por eso se retira del `ProcesarNotificacionUseCase` de la app y queda documentado únicamente como responsabilidad del Backend XALD.
 
 * **`:app` (Interfaz gráfica, Dashboard y orquestador principal):** implementado con Jetpack Compose; recibe el SMS del sistema operativo (conector 1) y coordina el resto de los módulos, además de exponer la UI y los reportes al usuario (conector 3).
 * **`:parser` (Receptor de eventos y motor de expresiones regulares):** su `BroadcastReceiver` capta el SMS entrante y su `Regex Engine` interpreta el texto con reglas locales conocidas, delegando en `:aigemini` los casos ambiguos.
@@ -400,62 +400,57 @@ sequenceDiagram
 # Deployment View
 
 # Cross-cutting Concepts
-<html>
-<body>
-<!--StartFragment--><html><head></head><body><h1>Cross-Cutting Concepts</h1>
-<h2>Context Map</h2>
-<p>Cada módulo del proyecto es un contexto delimitado: tiene su propia responsabilidad y su propio vocabulario, y no debe meterse en el trabajo del contexto vecino.</p>
 
-Módulo | Contexto | Responsabilidad
--- | -- | --
-:app | Presentación | Interfaz gráfica (Jetpack Compose), orquesta las llamadas a los demás módulos y muestra saldo/reportes al usuario.
-:parser | Ingesta | Recibe el SMS crudo del sistema operativo y lo interpreta con el Motor de Parseo (Regex).
-:aigemini | Categorización | Traduce la respuesta de la API externa de Gemini al formato de dominio propio del proyecto.
-:corefinanciero | Núcleo Financiero | Dueño único de la transacción persistida; expone su interfaz pública para que los demás la consulten.
-:syncqueue | Sincronización | Gestiona la cola de transacciones pendientes y coordina con el Backend XALD.
-Backend XALD | Externo | Vive fuera de los módulos Gradle del cliente. Recibe los lotes de :syncqueue vía REST/HTTPS.
+## 8.1 Context Map (Mapa de Contextos)
+Cada módulo del proyecto representa un **Bounded Context** (Contexto Delimitado) con responsabilidades claras y un vocabulario propio, evitando la filtración de lógica o datos hacia otros dominios.
 
+| Módulo | Contexto | Responsabilidad |
+| :--- | :--- | :--- |
+| **`:app`** | Presentación | Interfaz gráfica (Jetpack Compose), orquesta las llamadas a los demás módulos y muestra saldo/reportes al usuario. |
+| **`:parser`** | Ingesta | Recibe el SMS crudo del sistema operativo y lo interpreta mediante el Motor de Parseo (Regex). |
+| **`:aigemini`** | Categorización | Traduce las respuestas de la API externa de Gemini al formato de dominio propio mediante una Capa Anticorrupción (ACL). |
+| **`:corefinanciero`** | Núcleo Financiero | Dueño único de la transacción persistida; expone su interfaz pública para que otros módulos consulten sin tocar la base de datos. |
+| **`:syncqueue`** | Sincronización | Gestiona la cola de transacciones pendientes y coordina el envío de lotes hacia el Backend XALD. |
+| **Backend XALD** | Externo | Servicio fuera de los módulos Gradle móviles. Recibe los lotes de `:syncqueue` vía REST/HTTPS. |
 
-<h2>Link to Quality Attributes (ver <code>docs/aspectos.md</code>)</h2>
-<ul>
-<li><strong>Offline-First:</strong> <code>TransaccionEntidad</code> es la fuente primaria de verdad — se escribe primero de forma local. <code>ColaSincronizacion</code> garantiza que ninguna transacción se pierda mientras no hay conexión (aspecto A-01).</li>
-<li><strong>Cifrado AES-256:</strong> se aplica sobre <code>TransaccionEntidad</code>, protegiendo los datos financieros en reposo dentro de <code>:corefinanciero</code>.</li>
-<li><strong>TLS 1.3:</strong> protege la comunicación en tránsito en dos puntos: <code>ColaSincronizacion</code> hacia el Backend XALD, y <code>CategorizadorGemini</code> hacia la API externa de Gemini.</li>
-</ul></body></html><!--EndFragment-->
-</body>
-</html>
+---
 
-### Diccionario de Lenguaje Ubicuo
+## 8.2 Diccionario de Lenguaje Ubicuo
 
-| Término (ES)              | Módulo (Contexto)         | Tipo                    | Significado                                                                                     |
-|----------------------------|----------------------------|-------------------------|--------------------------------------------------------------------------------------------------|
-| `TransaccionProcesadaDTO`  | `:parser`                  | Dato en memoria (DTO)   | Objeto temporal que representa una transacción ya interpretada por el Motor de Parseo, antes de ser persistida. No tiene identidad de base de datos. |
-| `ParseoSms`                | `:parser`                  | Componente (Regex)      | Componente interno del contexto de Ingesta que aplica expresiones regulares al SMS crudo del sistema operativo para extraer los datos de la transacción. |
-| `CategorizadorGemini`      | `:aigemini`                 | Traductor (ACL)         | Capa Anticorrupción que adapta la respuesta cruda de la API externa de Gemini al formato de dominio propio del proyecto, evitando que cambios externos rompan el resto de la app. |
-| `TransaccionEntidad`       | `:corefinanciero`          | Entidad persistida (BD) | Representación oficial y permanente de una transacción dentro de la base de datos local. Es la fuente primaria de verdad (offline-first) y sobre ella se aplica el cifrado AES-256. |
-| `InformacionFinanciera`    | `:corefinanciero`          | Interfaz pública        | Contrato que expone el Núcleo Financiero para que otros módulos (`:app`, `:syncqueue`) consulten o soliciten operaciones sobre las transacciones, sin acceder directamente a la base de datos. |
-| `ColaSincronizacion`       | `:syncqueue`                | Gestor (cola)           | Componente que administra las transacciones pendientes de enviar al Backend XALD, garantizando que ninguna se pierda mientras no hay conexión, y protege el envío con TLS 1.3. |
+| Término (ES) | Módulo (Contexto) | Tipo | Significado |
+| :--- | :--- | :--- | :--- |
+| `TransaccionProcesadaDTO` | `:parser` | Dato en memoria (DTO) | Objeto temporal que representa una transacción interpretada por el Motor de Parseo antes de ser persistida. Sin identidad de base de datos. |
+| `ParseoSms` | `:parser` | Componente (Regex) | Componente interno que aplica expresiones regulares al SMS crudo del sistema operativo para extraer datos financieros. |
+| `CategorizadorGemini` | `:aigemini` | Traductor (ACL) | Capa Anticorrupción que adapta la respuesta de la API externa de Gemini al dominio local, aislando el sistema de cambios externos. |
+| `TransaccionEntidad` | `:corefinanciero` | Entidad persistida (BD) | Representación permanente de la transacción en SQLite/Room. Fuente primaria de verdad (*Offline-First*) cifrada con AES-256. |
+| `InformacionFinanciera` | `:corefinanciero` | Interfaz pública | Contrato que expone el Núcleo Financiero a otros módulos (`:app`, `:syncqueue`) para consultar datos de forma segura. |
+| `PayloadSincronizacionDTO` | `:corefinanciero` $\rightarrow$ `:syncqueue` | Dato en tránsito (DTO) | Objeto de solo lectura empaquetado por el núcleo financiero. Sirve de contrato seguro para enviar datos al Backend sin exponer la tabla original. |
+| `ColaSincronizacion` | `:syncqueue` | Gestor (Cola) | Componente que administra las transacciones pendientes de envío al Backend XALD, asegurando resistencia a desconexiones y tránsito seguro vía TLS 1.3. |
+| `ServicioParser` | `:parser` | Interfaz pública | Contrato que expone el contexto de Ingesta. Recibe el texto crudo del SMS y devuelve un `TransaccionProcesadaDTO`, manteniendo oculta la implementación `ParseoSms` mediante el modificador `internal`. |
+| `ServicioCategorizacion` | `:aigemini` | Interfaz pública | Contrato que expone el contexto de Categorización. Recibe el nombre del comercio y devuelve un `CategoriaResultado`, sin permitir que tipos propios de la API externa crucen la frontera del módulo. |
+| `CategoriaResultado` | `:aigemini` | Dato en memoria (DTO) | Resultado ya traducido por la Capa Anticorrupción. Contiene el nombre de la categoría y el nivel de confianza expresados en el vocabulario del dominio propio, no en el del proveedor externo. |
+| `GestorCoreFinanciero` | `:corefinanciero` | Componente (Persistencia) | Implementación interna del Núcleo Financiero. Genera el identificador único de cada transacción, convierte los datos recibidos en `TransaccionEntidad` y empaqueta los pendientes como `PayloadSincronizacionDTO`. |
+| `ColaSincronizacionService` | `:syncqueue` | Interfaz pública | Contrato que expone el contexto de Sincronización. Permite encolar un `PayloadSincronizacionDTO` y consultar los pendientes, manteniendo oculta la implementación `ColaSincronizacion`. |
+| `ProcesarNotificacionUseCase` | `:app` | Orquestador (Caso de uso) | Componente de la capa de aplicación que coordina el ciclo completo de una transacción invocando únicamente los contratos públicos de los cuatro contextos de dominio, sin conocer sus implementaciones internas. |
 
-### Tipos de Relación entre Contextos (DDD)
+---
 
-| Origen              | Destino              | Tipo de Relación         | Justificación                                                                                     |
-|----------------------|------------------------|----------------------------|------------------------------------------------------------------------------------------------------|
-| `:parser`            | `:corefinanciero`      | Customer-Supplier          | `:parser` produce `TransaccionProcesadaDTO`, pero `:corefinanciero` lo convierte a `TransaccionEntidad` antes de persistirlo — hay traducción/mapeo, no un modelo compartido literal, así que no es Shared Kernel. |
-| `:aigemini`          | Gemini API (externo)   | Anti-Corruption Layer (ACL)| `CategorizadorGemini` traduce la respuesta cruda de la API externa al formato de dominio propio, evitando que cambios en Gemini afecten el resto del sistema. |
-| `:corefinanciero`    | `:app`                 | Customer-Supplier           | `:app` consulta el Núcleo Financiero a través de `InformacionFinanciera` (interfaz pública); depende del contrato que expone `:corefinanciero`. |
-| `:corefinanciero`    | `:syncqueue`           | Customer-Supplier           | `:syncqueue` lee las transacciones pendientes desde `:corefinanciero` a través de su interfaz pública para encolarlas y enviarlas. |
-| `:syncqueue`         | Backend XALD (externo) | Customer-Supplier           | `:syncqueue` envía lotes al Backend vía REST/HTTPS; el Backend es el proveedor externo del que depende la sincronización. |
-## Offline-First como principio transversal
+## 8.3 Tipos de Relación entre Contextos (DDD)
 
-No es una decisión de un solo módulo — atraviesa `:corefinanciero` (que es la fuente primaria de verdad, no una caché), `:syncqueue` (que asume que la red puede no estar disponible en cualquier momento) y `:app` (que nunca debe mostrarle al usuario un error de red al registrar un gasto). Cualquier módulo nuevo que se agregue al proyecto debe respetar esta misma regla: nada puede depender de tener conexión para funcionar. *(Ver RT-02, ADR-0001, ESC-01)*
+| Origen | Destino | Tipo de Relación (DDD) | Justificación Teleológica |
+| :--- | :--- | :--- | :--- |
+| `:parser` | `:corefinanciero` | **Customer-Supplier** | `:parser` entrega `TransaccionProcesadaDTO` y `:corefinanciero` lo transforma a `TransaccionEntidad` antes de guardar. Hay mapeo directo entre dominios. |
+| `:aigemini` | Gemini API (Externo) | **Anti-Corruption Layer (ACL)** | `CategorizadorGemini` aísla el modelo de dominio interno de las variaciones y tipos crudos de la API externa. |
+| `:corefinanciero` | `:app` | **Customer-Supplier** | `:app` consume los servicios financieros mediante la interfaz pública `InformacionFinanciera`, respetando el contrato expuesto por el proveedor. |
+| `:corefinanciero` | `:syncqueue` | **Customer-Supplier** | `:corefinanciero` despacha un `PayloadSincronizacionDTO` de solo lectura a `:syncqueue` a través de su interfaz pública, evitando accesos directos a la base de datos. |
+| `:syncqueue` | Backend XALD (Externo) | **Customer-Supplier** | `:syncqueue` entrega lotes formateados al Backend mediante REST/HTTPS; el servidor actúa como el proveedor remoto del estado consolidado. |
 
-## Cifrado y protección de datos
+---
 
-El cifrado con AES-256 y Android Keystore no vive en un solo lugar: protege los datos en reposo dentro de `:corefinanciero`, y se combina con TLS 1.3 para protegerlos en tránsito hacia `:aigemini` y hacia el Backend XALD. Cualquier dato financiero que se mueva entre módulos o hacia afuera del sistema debe pasar por alguna de estas dos capas de protección. *(Ver RT-03, RL-01, ADR-0004, ESC-04)*
-
-## Manejo de errores no bloqueante
-
-Ningún fallo externo puede impedir que una transacción se guarde. Si `:aigemini` no responde, `:parser` guarda igual la transacción como "Sin Categorizar" en `:corefinanciero`; si no hay conexión, `:syncqueue` simplemente encola el envío para más adelante. Este principio — nunca bloquear el registro por un fallo ajeno al propio dispositivo — se repite en más de un escenario de calidad y debería aplicarse a cualquier integración externa que se agregue en el futuro. *(Ver ESC-01, ESC-02)*
+## 8.4 Enlace a Atributos de Calidad (`docs/aspectos.md`)
+* **Offline-First (A-01):** `TransaccionEntidad` es la fuente primaria de verdad local. `ColaSincronizacion` retiene los cambios locales mientras no exista conectividad a internet.
+* **Cifrado AES-256:** Cifra la persistencia en reposo de `TransaccionEntidad` dentro del contenedor del módulo `:corefinanciero`.
+* **Cifrado TLS 1.3:** Protege la comunicación en tránsito en dos fronteras externas: desde `CategorizadorGemini` hacia la API de Gemini, y desde `ColaSincronizacion` hacia el Backend XALD.
 
 # Architecture Decisions
 
