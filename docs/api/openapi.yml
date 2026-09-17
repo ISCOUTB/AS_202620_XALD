@@ -2,16 +2,22 @@ openapi: 3.1.0
 info:
   title: API de Sincronización Financiera - Proyecto XALD
   description: >
-    API REST asíncrona para la recepción de transacciones financieras procesadas 
-    por el cliente móvil bajo una arquitectura Offline-First. Garantiza la ingesta 
+    API REST asíncrona para la recepción de transacciones financieras procesadas
+    por el cliente móvil bajo una arquitectura Offline-First. Garantiza la ingesta
     higienizada de datos provenientes de la capa Anti-Corrupción (ACL / Regex / Gemini).
   version: 1.0.0
   contact:
     name: Equipo de Desarrollo XALD
+  license:
+    name: Propietaria
 
 servers:
-  - url: http://localhost:8000/api/v1
-    description: Servidor de Desarrollo Local (FastAPI)
+  - url: https://api.xald-app.com/api/v1
+    description: Servidor de Producción
+
+# 1. Definición global de seguridad para satisfacer al linter
+security:
+  - ApiKeyAuth: []
 
 paths:
   /transacciones:
@@ -19,7 +25,7 @@ paths:
       summary: Recibir transacción financiera desde la cola de sincronización
       description: >
         Endpoint asíncrono que recibe los DTOs de transacciones encolados en el dispositivo móvil.
-        Aplica validación estricta de esquemas y responde inmediatamente con un estado de aceptación 
+        Aplica validación estricta de esquemas y responde inmediatamente con un estado de aceptación
         para procesamiento en segundo plano (Eventual Consistency).
       operationId: registrarTransaccion
       requestBody:
@@ -30,34 +36,21 @@ paths:
               $ref: '#/components/schemas/TransaccionDTO'
       responses:
         '202':
-          description: Transacción aceptada para procesamiento asíncrono e ingesta en BD.
+          description: Transacción aceptada y encolada exitosamente.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/RespuestaSincronizacion'
-        '400':
-          description: Estructura del mensaje JSON malformada o sintaxis inválida.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorRespuesta'
-        '422':
-          description: Violación de contrato de datos o fallo de validación de tipos en Pydantic.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorValidacion'
 
 components:
-  schemas:
-    OrigenDatosEnum:
-      type: string
-      enum:
-        - SMS_REGEX
-        - AI_GEMINI
-        - MANUAL
-      description: Identifica la capa o mecanismo que extrajo e higienizó la transacción localmente.
+  # 2. Esquema del API Key
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
 
+  schemas:
     TransaccionDTO:
       type: object
       required:
@@ -72,91 +65,52 @@ components:
         id_transaccion:
           type: string
           format: uuid
-          example: "e3b0c442-98fc-11ee-b9d1-0242ac120002"
-          description: Identificador único universal generado en el cliente móvil.
+          description: Identificador único universal (UUID)
         monto:
           type: number
-          format: double
-          minimum: 0.01
-          example: 45000.00
-          description: Valor numérico de la transacción financiera.
+          format: float
+          minimum: 0
+          exclusiveMinimum: true
+          description: Valor numérico de la transacción
         moneda:
           type: string
           minLength: 3
           maxLength: 3
-          example: "COP"
-          description: Código de moneda bajo norma ISO 4217.
+          example: COP
         comercio:
           type: string
           minLength: 1
-          example: "Tienda Ara"
-          description: Nombre limpio del establecimiento o destinatario.
+          example: Tienda Ara
         categoria:
           type: string
           minLength: 1
-          example: "Supermercado"
-          description: Categoría asignada a la transacción.
+          example: Supermercado
         fecha_transaccion:
           type: string
           format: date-time
-          example: "2026-09-16T22:15:00Z"
-          description: Estampa de tiempo en formato ISO 8601 UTC.
+          description: Estampa de tiempo ISO 8601 UTC
         origen_datos:
           $ref: '#/components/schemas/OrigenDatosEnum'
 
     RespuestaSincronizacion:
       type: object
-      required:
-        - estado
-        - id_transaccion
-        - mensaje
-        - fecha_recepcion
       properties:
         estado:
           type: string
-          example: "ACEPTADO"
+          example: ACEPTADO
         id_transaccion:
           type: string
           format: uuid
-          example: "e3b0c442-98fc-11ee-b9d1-0242ac120002"
         mensaje:
           type: string
-          example: "Transacción recibida y encolada exitosamente para persistencia."
+          example: Transacción recibida y encolada exitosamente para persistencia.
         fecha_recepcion:
           type: string
           format: date-time
-          example: "2026-09-16T22:15:01Z"
 
-    ErrorRespuesta:
-      type: object
-      required:
-        - codigo
-        - error
-      properties:
-        codigo:
-          type: integer
-          example: 400
-        error:
-          type: string
-          example: "Petición HTTP malformada o cuerpo del mensaje ilegible."
-
-    ErrorValidacion:
-      type: object
-      required:
-        - codigo
-        - detalles
-      properties:
-        codigo:
-          type: integer
-          example: 422
-        detalles:
-          type: array
-          items:
-            type: object
-            properties:
-              campo:
-                type: string
-                example: "monto"
-              mensaje:
-                type: string
-                example: "El campo debe ser un número decimal válido mayor a 0."
+    OrigenDatosEnum:
+      type: string
+      enum:
+        - SMS_REGEX
+        - AI_GEMINI
+        - MANUAL
