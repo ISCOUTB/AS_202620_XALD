@@ -1,31 +1,51 @@
-name: Android CI
+name: Flutter CI - Monorepo XALD
 
 on:
   push:
-    branches: [ "experimental", "master" ]
+    branches: ["puente" ]
   pull_request:
-    branches: [ "experimental", "master" ]
+    branches: ["puente" ]
   workflow_dispatch:
 
 jobs:
-  build-and-test:
+  test-and-audit:
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: XALDAPP_FLU
 
     steps:
       - name: Checkout del repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar entorno Java JDK 17
+      - name: Configurar Java JDK 17 (Requerido para Flutter/Android)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
 
-      - name: Dar permisos de ejecución a Gradle Wrapper
-        run: chmod +x gradlew
-        working-directory: XALDAPP
+      - name: Configurar Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
 
-      - name: Ejecutar pruebas unitarias de los módulos
-        run: ./gradlew testDebugUnitTest
-        working-directory: XALDAPP
+      - name: Verificar versión de Flutter
+        run: flutter --version
+
+      - name: Obtener dependencias de la app principal y módulos locales
+        run: flutter pub get
+
+      - name: Analizar código estático (Linter)
+        run: flutter analyze
+
+      - name: Ejecutar pruebas unitarias de los módulos locales
+        run: |
+          flutter test packages/corefinanciero/test/corefinanciero_test.dart
+          flutter test packages/aigemini/test/aigemini_test.dart
+          flutter test packages/parser/test/parser_test.dart
+          flutter test packages/syncqueue/test/syncqueue_test.dart
+
+      - name: Ejecutar prueba de corte vertical (Integración)
+        run: flutter test test/corte_vertical_test.dart
