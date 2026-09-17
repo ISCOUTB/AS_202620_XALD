@@ -49,3 +49,8 @@ jobs:
 
       - name: Ejecutar prueba de corte vertical (Integración)
         run: flutter test test/corte_vertical_test.dart
+
+      - name: Validar contrato OpenAPI
+        uses: redocly/cli-action@v1
+        with:
+          args: lint docs/api/openapi.yaml
