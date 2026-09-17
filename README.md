@@ -6,6 +6,7 @@ PROYECTO XALD, APP FINANZAS PERSONALES
 ## 🚀 Corte Vertical Ejecutable
 
 El proyecto cuenta con un corte vertical integrado que valida el flujo de datos completo a través de la aplicación Flutter (`XALDAPP_FLU`) y sus paquetes locales en Dart (`aigemini`, `corefinanciero`, `parser` y `syncqueue`).
+https://github.com/ISCOUTB/AS_202620_XALD/blob/puente/XALDAPP_FLU/test/corte_vertical_test.dart
 
 ### 🛠️ Prueba de Integración
 La prueba de corte vertical (`corte_vertical_test.dart`) orquesta la recepción del mensaje bancario crudo, invoca las reglas del parser, categoriza mediante la IA, procesa el Core Financiero y encola en el servicio de sincronización.
