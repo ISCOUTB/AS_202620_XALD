@@ -10,12 +10,12 @@ info:
     name: Equipo de Desarrollo XALD
   license:
     name: Propietaria
+    url: https://xald-app.com/licencia
 
 servers:
   - url: https://api.xald-app.com/api/v1
     description: Servidor de Producción
 
-# 1. Definición global de seguridad para satisfacer al linter
 security:
   - ApiKeyAuth: []
 
@@ -41,9 +41,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RespuestaSincronizacion'
+        '400':
+          description: Petición inválida (Error de formato o esquema del DTO)
 
 components:
-  # 2. Esquema del API Key
   securitySchemes:
     ApiKeyAuth:
       type: apiKey
@@ -69,8 +70,7 @@ components:
         monto:
           type: number
           format: float
-          minimum: 0
-          exclusiveMinimum: true
+          exclusiveMinimum: 0
           description: Valor numérico de la transacción
         moneda:
           type: string
