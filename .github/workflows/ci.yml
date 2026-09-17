@@ -51,4 +51,5 @@ jobs:
         run: flutter test test/corte_vertical_test.dart
 
       - name: Validar contrato OpenAPI
-        run: npx --yes @redocly/cli lint docs/api/openapi.yml || npx --yes @redocly/cli lint docs/api/openapi.yaml
+        working-directory: .
+        run: npx --yes @redocly/cli lint docs/api/openapi.yml
