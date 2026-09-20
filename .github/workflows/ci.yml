@@ -31,7 +31,7 @@ jobs:
         working-directory: XALDAPP
         
       - name: Instalar Redocly CLI
-        run: npm install -g @redocly/cli@1.25.0
+        run: npm install -g --ignore-scripts @redocly/cli@1.25.0
 
       - name: Validar contrato OpenAPI
         run: redocly lint docs/api/openapi.yaml
