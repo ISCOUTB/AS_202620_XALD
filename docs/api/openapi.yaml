@@ -1,4 +1,4 @@
-openapi: 3.1.ERROR
+openapi: 3.1.0
 info:
   title: API de Sincronización Financiera - Proyecto XALD
   description: >
@@ -53,7 +53,7 @@ components:
 
   schemas:
     TransaccionDTO:
-      type: object
+      type: TIPO_INVALIDO_PARA_PRUEBA
       required:
         - id_transaccion
         - monto
