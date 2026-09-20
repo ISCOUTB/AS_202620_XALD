@@ -31,4 +31,4 @@ jobs:
         working-directory: XALDAPP
 
       - name: Validar contrato OpenAPI
-        run: npx --yes @redocly/cli lint docs/api/openapi.yml
+        run: npx --yes @redocly/cli lint docs/api/openapi.yaml
