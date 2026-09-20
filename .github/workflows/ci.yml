@@ -29,3 +29,6 @@ jobs:
       - name: Ejecutar pruebas unitarias de los módulos
         run: ./gradlew testDebugUnitTest
         working-directory: XALDAPP
+
+      - name: Validar contrato OpenAPI
+        run: npx --yes @redocly/cli lint docs/api/openapi.yml
