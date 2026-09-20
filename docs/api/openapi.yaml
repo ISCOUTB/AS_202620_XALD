@@ -53,7 +53,7 @@ components:
 
   schemas:
     TransaccionDTO:
-      type: TIPO_INVALIDO_PARA_PRUEBA
+      type: object
       required:
         - id_transaccion
         - monto
