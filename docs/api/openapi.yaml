@@ -2,8 +2,9 @@ openapi: 3.1.0
 info:
   title: API de Sincronización Financiera - Proyecto XALD
   description: >
-    API REST para la recepción de transacciones financieras sincronizadas
-    por el cliente móvil bajo una arquitectura Offline-First.
+    API REST asíncrona para la recepción de transacciones financieras procesadas
+    por el cliente móvil bajo una arquitectura Offline-First. Garantiza la ingesta
+    higienizada de datos provenientes de la capa Anti-Corrupción (ACL / Regex / Gemini).
   version: 1.0.0
   contact:
     name: Equipo de Desarrollo XALD
@@ -12,63 +13,104 @@ info:
     url: https://xald-app.com/licencia
 
 servers:
-  - url: http://localhost:3000/api/v1
-    description: Servidor local (Express, backend_xald/index.js)
+  - url: https://api.xald-app.com/api/v1
+    description: Servidor de Producción
+
+security:
+  - ApiKeyAuth: []
 
 paths:
-  /sync:
+  /transacciones:
     post:
-      summary: Sincronizar una transacción financiera pendiente
+      summary: Recibir transacción financiera desde la cola de sincronización
       description: >
-        Recibe el payload de sincronización enviado por :syncqueue
-        y confirma su recepción.
-      operationId: sincronizarTransaccion
+        Endpoint asíncrono que recibe los DTOs de transacciones encolados en el dispositivo móvil.
+        Aplica validación estricta de esquemas y responde inmediatamente con un estado de aceptación
+        para procesamiento en segundo plano (Eventual Consistency).
+      operationId: registrarTransaccion
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PayloadSincronizacionDTO'
+              $ref: '#/components/schemas/TransaccionDTO'
       responses:
-        '200':
-          description: Transacción recibida y confirmada.
+        '202':
+          description: Transacción aceptada y encolada exitosamente.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/RespuestaSincronizacion'
+        '400':
+          description: Petición inválida (Error de formato o esquema del DTO)
 
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
   schemas:
-    PayloadSincronizacionDTO:
+    TransaccionDTO:
       type: object
       required:
-        - idTransaccion
+        - id_transaccion
         - monto
+        - moneda
         - comercio
-        - fechaTimestamp
+        - categoria
+        - fecha_transaccion
+        - origen_datos
       properties:
-        idTransaccion:
+        id_transaccion:
           type: string
-          description: Identificador único de la transacción.
+          format: uuid
+          description: Identificador único universal (UUID)
         monto:
           type: number
-          format: double
-          description: Valor numérico de la transacción.
+          format: float
+          exclusiveMinimum: 0
+          description: Valor numérico de la transacción
+        moneda:
+          type: string
+          minLength: 3
+          maxLength: 3
+          example: COP
         comercio:
           type: string
-          description: Nombre del comercio asociado a la transacción.
-        fechaTimestamp:
-          type: integer
-          format: int64
-          description: Timestamp (epoch, milisegundos) de la transacción.
+          minLength: 1
+          example: Tienda Ara
+        categoria:
+          type: string
+          minLength: 1
+          example: Supermercado
+        fecha_transaccion:
+          type: string
+          format: date-time
+          description: Estampa de tiempo ISO 8601 UTC
+        origen_datos:
+          $ref: '#/components/schemas/OrigenDatosEnum'
 
     RespuestaSincronizacion:
       type: object
       properties:
-        status:
+        estado:
           type: string
-          example: success
-        synced_at:
+          example: ACEPTADO
+        id_transaccion:
+          type: string
+          format: uuid
+        mensaje:
+          type: string
+          example: Transacción recibida y encolada exitosamente para persistencia.
+        fecha_recepcion:
           type: string
           format: date-time
-          description: Timestamp ISO 8601 generado por el backend al responder.
+
+    OrigenDatosEnum:
+      type: string
+      enum:
+        - SMS_REGEX
+        - AI_GEMINI
+        - MANUAL
