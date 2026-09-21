@@ -100,6 +100,8 @@ sequenceDiagram
 4. El Backend XALD detecta que ya existe un registro previo y aplica **Last-Write-Wins (LWW)**: compara los timestamps y conserva la versión más reciente.
 5. El dispositivo cuya versión no ganó actualiza su copia local con la versión vencedora, para que ambos dispositivos queden consistentes.
 
+Aquí está, solo el bloque del diagrama, listo para copiar y pegar (reemplaza el bloque Mermaid actual dentro de la sección **6.3** en `docs/arc42/06-Runtime view.md`):
+
 ```mermaid
 sequenceDiagram
     participant D1 as Dispositivo A (:syncqueue)
@@ -110,18 +112,18 @@ sequenceDiagram
     D1->>D1: Edita transacción X (timestamp T1)
     D2->>D2: Edita transacción X (timestamp T2)
 
-    D1->>BK: POST /api/v1/sync (transacción X, T1)
+    D1->>BK: POST /api/v1/sync<br/>{idTransaccion, monto, comercio, fechaTimestamp: T1}
     BK->>BK: Guarda X con T1 (sin conflicto todavía)
-    BK-->>D1: Confirmación de éxito
+    BK-->>D1: 200 OK { status: "success", synced_at }
 
-    D2->>BK: POST /api/v1/sync (transacción X, T2)
+    D2->>BK: POST /api/v1/sync<br/>{idTransaccion, monto, comercio, fechaTimestamp: T2}
     BK->>BK: Detecta conflicto: X ya existe con T1
     alt T2 es más reciente
         BK->>BK: Aplica LWW: conserva la versión con T2
     else T1 es más reciente
         BK->>BK: Aplica LWW: conserva la versión con T1
     end
-    BK-->>D2: Confirmación (con la versión vencedora)
+    BK-->>D2: 200 OK { status: "success", synced_at }
     D2->>D2: Actualiza su copia local con la versión vencedora
 ```
 
