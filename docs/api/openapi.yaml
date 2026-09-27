@@ -13,14 +13,50 @@ info:
     url: https://xald-app.com/licencia
 
 servers:
-  - url: https://api.xald-app.com/api/v1
-    description: Servidor de Producción
+  - url: https://xald-backend.onrender.com
+    description: Servidor de Producción (Render)
 
 security:
   - ApiKeyAuth: []
 
 paths:
-  /transacciones:
+  /health:
+    get:
+      summary: Health check del servicio
+      description: >
+        Endpoint público (sin autenticación) usado por Render para verificar que el
+        servicio está en línea (`healthCheckPath` en render.yaml).
+      operationId: health
+      security: []
+      responses:
+        '200':
+          description: El servicio está en línea.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /metrics:
+    get:
+      summary: Métricas en formato Prometheus
+      description: >
+        Expone las métricas de la API en el formato de texto de Prometheus, incluyendo
+        el contador `xald_sync_conflictos_resueltos_total` (ESC-05).
+      operationId: metrics
+      security: []
+      responses:
+        '200':
+          description: Métricas en formato de texto Prometheus.
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/v1/transacciones:
     post:
       summary: Recibir transacción financiera desde la cola de sincronización
       description: >
