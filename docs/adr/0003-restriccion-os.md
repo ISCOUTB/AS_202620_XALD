@@ -1,5 +1,6 @@
 ## ADR-0003: Restricción de Plataforma a Android y Exclusión de iOS
 * *Estatus:* Aprobado
+* *Fecha:* Agosto 2026
 * *Proyecto:* XALDAPP — Aplicación de gestión financiera
 
 ## Contexto y Problema
