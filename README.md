@@ -44,7 +44,51 @@ $env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"; $env:ANDROID_HOME=
 
 <img width="1104" height="254" alt="Captura de pantalla 2026-08-29 160428" src="https://github.com/user-attachments/assets/1ea8b153-e37b-4a51-a09c-b43a0b5f3c04" />
 
+## 🐳 Backend XALD — Cómo levantar el entorno localmente
 
+El Backend XALD (API de Sincronización Financiera) está en `backend/`, corre en **Python 3.12 + FastAPI**, y se distribuye como contenedor Docker (el mismo `Dockerfile` que usa Render en producción).
+
+### Requisitos: Docker instalado (o Python 3.12+ si prefieres correrlo sin contenedor).
+
+### 1. Configurar las variables de entorno
+Copia el archivo de ejemplo y complétalo con tus propios valores locales:
+```powershell
+cp .env.example .env
+```
+El archivo `.env.example` ya trae las variables necesarias:
+```
+XALD_API_KEY=      # pon cualquier valor local para pruebas, ej: dev-key-123
+LOG_LEVEL=INFO
+PORT=8000
+```
+⚠️ Nunca subas tu `.env` real al repositorio — solo `.env.example` va versionado.
+
+### 2. Construir y levantar el contenedor
+```powershell
+docker build -t xald-backend ./backend
+docker run --rm -p 8000:8000 --env-file .env xald-backend
+```
+
+### 3. Verificar que quedó arriba
+```powershell
+curl http://localhost:8000/health
+```
+Salida esperada:
+```json
+{"status": "ok"}
+```
+
+También puedes abrir `http://localhost:8000/docs` en el navegador para ver la documentación interactiva (Swagger UI) y probar el endpoint `POST /api/v1/transacciones` directamente, usando el valor de `XALD_API_KEY` que pusiste en tu `.env` como header `X-API-Key`.
+
+### Alternativa sin Docker
+```powershell
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+### Despliegue en Render (producción)
+El backend en línea (`https://xald-backend.onrender.com`) se despliega automáticamente desde `render.yaml` (Render Blueprint) cada vez que el job `deploy-backend` del CI se ejecuta sobre `master`. Las variables sensibles (`XALD_API_KEY`) se configuran directamente en el panel de Render → *Environment*, nunca en el repositorio.
 
 ### Descripción de la app
 
