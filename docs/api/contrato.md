@@ -76,3 +76,14 @@ Para ejecutar y probar la API localmente con la documentación interactiva Swagg
  uvicorn app.main:app --reload --port 8000
  ```
 4. Acceder a la documentación Swagger UI en: http://localhost:8000/docs
+
+## 6. Enlaces de Verificación y Auditoría
+
+- **Ejecución del CI en GitHub Actions (Verde):** [Run #35526300950 en GitHub Actions](https://github.com/ISCOUTB/AS_202620_XALD/actions/runs/35526300950/job/106118944603)
+- **Análisis de SonarQube Cloud:** [Run #106119010505 en SonarQube Cloud](https://github.com/ISCOUTB/AS_202620_XALD/runs/106119010505)
+
+## 7. Evidencia de Validación: 
+**ante un cambio incompatible:**
+<img width="909" height="273" alt="Captura de pantalla 2026-09-20 114508" src="https://github.com/user-attachments/assets/a1a2a646-9347-4cee-8a1d-e2ff05f9cc6b" />
+
+Se cambió el tipo de entrada para los DTOs, de forma que se lograra validar que ante faltas incompatibles el CI arroja un error y no sale en verde.
