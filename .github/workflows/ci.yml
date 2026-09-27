@@ -35,3 +35,37 @@ jobs:
 
       - name: Validar contrato OpenAPI
         run: redocly lint docs/api/openapi.yaml
+
+  backend-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar entorno Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar dependencias del backend
+        run: pip install -r requirements.txt
+        working-directory: backend
+
+      - name: Ejecutar pruebas del backend (pytest)
+        run: python -m pytest tests/ -v
+        working-directory: backend
+
+  deploy-backend:
+    needs: [build-and-test, backend-tests]
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Disparar Deploy Hook de Render
+        run: |
+          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK }}" ]; then
+            echo "::error::El secreto RENDER_DEPLOY_HOOK no está configurado."
+            exit 1
+          fi
+          curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
