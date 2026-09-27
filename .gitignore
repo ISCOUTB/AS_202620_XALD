@@ -16,3 +16,10 @@ local.properties
 .cxx/
 captures/
 .DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Variables de entorno con secretos
+.env
