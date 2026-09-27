@@ -20,6 +20,8 @@ Estas son las condiciones que ya vienen dadas para el proyecto y que no podemos 
 
 - **RO-02 (Costo $0 / Presupuesto):** El proyecto tiene que usar únicamente servicios en sus capas gratuitas, como Google AI Studio / Gemini API (Free Tier), e infraestructura que no tenga costo. *(Origen: limitación de presupuesto del equipo estudiantil)*
 
+- **RO-03 (Sin tarjeta de crédito):** El despliegue del Backend XALD en Render se hizo sin necesidad de registrar una tarjeta de crédito ni otro medio de pago — el plan Free de Render (Web Service tipo Docker) no lo exige para este caso de uso. Esto refuerza RO-02: el equipo puede operar la infraestructura gratuita sin comprometer datos financieros propios ni depender de que alguien adelante un pago. *(Origen: verificado durante el despliegue del Backend XALD, Semana 8)*
+
 ## Restricciones Legales
 
 - **RL-01 (Protección de Datos Personales — Habeas Data):** Como XALD maneja información financiera personal (saldos, movimientos bancarios, categorías de gasto), el desarrollo tiene que respetar la Ley 1581 de 2012, que desarrolla el derecho de las personas a conocer, actualizar y rectificar la información que hay sobre ellas en bases de datos (lo que se conoce como Habeas Data), en concordancia con los artículos 15 y 20 de la Constitución Política de Colombia. En la práctica, esto significa que el usuario debe poder ver, corregir y eliminar sus datos personales dentro de la app, y que XALD no puede usar esa información para fines distintos a los que el usuario autorizó — esto también explica por qué en el flujo con Gemini API solo se envía el nombre del comercio y el monto, sin datos como cédula o número de cuenta. *(Origen: normativa nacional — Ley 1581 de 2012, Artículo 1º)*
