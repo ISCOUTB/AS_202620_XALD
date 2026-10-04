@@ -1,5 +1,6 @@
 ## ADR-0004: Modelo de Seguridad Acotado y Cifrado de Datos a Nivel de Persistencia y Tránsito
 * *Estatus:* Aprobado
+* *Fecha:* Agosto 2026
 * *Proyecto:* XALDAPP — Aplicación de gestión financiera
 
 ## Contexto y Problema

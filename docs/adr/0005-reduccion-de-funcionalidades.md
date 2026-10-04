@@ -1,5 +1,6 @@
 ## ADR-0005: Alcance Reducido en el Módulo de Analítica y Reportes (Focus en MVP)
 * *Estatus:* APROBADA
+* *Fecha:* Agosto 2026
 * *Proyecto:* XALDAPP — Aplicación de gestión financiera
 
 ## Contexto y Problema

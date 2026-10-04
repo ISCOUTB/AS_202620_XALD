@@ -35,3 +35,61 @@ jobs:
 
       - name: Validar contrato OpenAPI
         run: redocly lint docs/api/openapi.yaml
+
+  backend-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar entorno Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar dependencias del backend
+        run: pip install -r requirements.txt
+        working-directory: backend
+
+      - name: Ejecutar pruebas del backend (pytest)
+        run: python -m pytest tests/ -v
+        working-directory: backend
+
+  deploy-backend:
+    needs: [build-and-test, backend-tests]
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Disparar Deploy Hook de Render
+        run: |
+          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK }}" ]; then
+            echo "::error::El secreto RENDER_DEPLOY_HOOK no está configurado."
+            exit 1
+          fi
+          curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+
+      - name: Verificar URL pública (health check con hora)
+        run: |
+          URL="https://xald-backend.onrender.com/health"
+          echo "Verificando $URL desde el runner de GitHub Actions (fuera de la red de la universidad)..."
+
+          # Reintenta hasta 10 veces (Render puede tardar en reconstruir/despertar el servicio)
+          for intento in $(seq 1 10); do
+            HORA_UTC="$(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            CODIGO=$(curl -s -o /tmp/respuesta.json -w "%{http_code}" "$URL" || echo "000")
+
+            if [ "$CODIGO" = "200" ]; then
+              echo "✅ [$HORA_UTC] Respuesta HTTP $CODIGO en el intento $intento"
+              echo "Cuerpo de la respuesta:"
+              cat /tmp/respuesta.json
+              exit 0
+            fi
+
+            echo "⏳ [$HORA_UTC] Intento $intento: HTTP $CODIGO, reintentando en 15s..."
+            sleep 15
+          done
+
+          echo "::error::La URL pública no respondió con HTTP 200 tras varios intentos."
+          exit 1

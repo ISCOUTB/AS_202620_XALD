@@ -59,9 +59,9 @@ ultima_version = {}
 # ---------------------------------------------------------------------------
 # Seguridad: la llave se toma del entorno, nunca del código
 # ---------------------------------------------------------------------------
-def verificar_api_key(x_api_key: str = Header(default="")):
+def verificar_llave(llave: str = Header(default="", alias="X-API-Key")):
     esperada = os.environ.get("XALD_API_KEY", "")
-    if not esperada or not hmac.compare_digest(x_api_key, esperada):
+    if not esperada or not hmac.compare_digest(llave, esperada):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key inválida")
 
 
@@ -105,7 +105,7 @@ async def metrics():
     status_code=status.HTTP_202_ACCEPTED,
     response_model=RespuestaSincronizacion,
     summary="Recibir transacción financiera desde la cola de sincronización",
-    dependencies=[Depends(verificar_api_key)],
+    dependencies=[Depends(verificar_llave)],
 )
 async def registrar_transaccion(transaccion: TransaccionDTO):
     TRANSACCIONES_RECIBIDAS.labels(origen_datos=transaccion.origen_datos.value).inc()
