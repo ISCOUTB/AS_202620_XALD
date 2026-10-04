@@ -111,7 +111,7 @@ async def registrar_transaccion(transaccion: TransaccionDTO):
     TRANSACCIONES_RECIBIDAS.labels(origen_datos=transaccion.origen_datos.value).inc()
 
     previa = ultima_version.get(transaccion.id_transaccion)
-    if previa is None or transaccion.fecha_transaccion > previa:
+    if previa is None or transaccion.fecha_transaccion < previa:
         ultima_version[transaccion.id_transaccion] = transaccion.fecha_transaccion
     if previa is not None:
         CONFLICTOS_RESUELTOS.inc()
