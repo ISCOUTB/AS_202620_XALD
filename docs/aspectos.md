@@ -26,7 +26,7 @@ No hay contextos sin aspecto asociado ni aspectos que no correspondan a un conte
 
 ## Notas
 
-- Los aspectos A-02 y A-03 comparten el [ADR-0001](adr/0001-patron-offline-first.md) porque la decisión de arquitectura Offline-First determina tanto la estrategia de persistencia local como el mecanismo de sincronización asíncrona con resolución Last-Write-Wins.
+- Los aspectos A-02 y A-03 comparten el [ADR-0001](adr/0001-patron-offline-first.md) porque la decisión de arquitectura Offline-First determina tanto la estrategia de persistencia local como el mecanismo de sincronización asíncrona con resolución Last-Write-Wins. El aspecto A-03 suma además el [ADR-0011](adr/0011-resolucion-conflictos-lww.md), que concretó cómo se implementa y verifica esa resolución LWW en el Backend.
 - El aspecto A-05 suma el [ADR-0007](adr/0007-contratos-por-modulo.md), que reajustó las fronteras entre contextos introduciendo un contrato público por módulo con implementación `internal`.
 - El [ADR-0005](adr/0005-reduccion-de-funcionalidades.md) (alcance reducido del módulo de analítica) no se asocia todavía a ningún aspecto de esta tabla.
 - El aspecto A-04 es el único sin código asociado. No se marca como cubierto para no representar como implementado algo que solo existe en la documentación; su ausencia está registrada como deuda técnica en la [sección 11 de arc42](arc42/arc42-template-EN.md#risks-and-technical-debts).
