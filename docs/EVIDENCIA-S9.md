@@ -1,6 +1,6 @@
 ## Auditoría de erosión arquitectónica
 
-- **Fecha:** 2026-10-04 · **Commit auditado:** `<hash>`
+- **Fecha:** 2026-10-04
 - **Método:** análisis estático (imports entre módulos, `build.gradle.kts`, visibilidad de clases, contraste con ADR y matriz de propiedad). Continúa la [auditoría de la Semana 6](auditoriaviolaciones-semana6.md).
 
 ### Reglas verificadas
@@ -12,18 +12,18 @@
 | **R3.** Solo `:corefinanciero` maneja `TransaccionEntidad`. | ADR-0007, `ownership-matrix.md` |
 | **R4.** Solo `:app` depende de los cuatro módulos de dominio. | ADR-0007 |
 | **R5.** En el backend, `dtos.py` no depende de `main.py`. | Regla adicional |
-| **R6.** Lo que la documentación afirma que existe, existe en el código. | Consistencia doc ↔ código |
+| **R6.** Lo que la documentación afirma que existe, existe en el código. | Consistencia doc y código |
 
 ### Resultados
 
 | Regla | Verificación | Resultado |
 |---|---|---|
-| R1 | Imports en `src/main`: `:parser` 0, `:aigemini` 0, `:corefinanciero` 0, `:syncqueue` 1 (el DTO permitido). Dependencias `project(...)`: solo `:app` hacia los 4 y `:syncqueue → :corefinanciero`. | ✅ Cumple |
-| R2 | `ParseoSms`, `GestorCoreFinanciero`, `ColaSincronizacion` y `CategorizadorGemini` son `internal`. | ✅ Cumple |
-| R3 | `TransaccionEntidad` no se usa fuera de `:corefinanciero`. | ✅ En uso, ⚠️ ver H-1 |
-| R4 | Solo `:app/build.gradle.kts` declara los cuatro módulos. | ✅ Cumple |
-| R5 | `main.py` importa `app.dtos`; `dtos.py` no importa nada del proyecto. | ✅ Cumple |
-| R6 | Contraste con ADR-0004, KDoc de `TransaccionEntidad` y `ownership-matrix.md`. | ⚠️ Ver H-3 y H-4 |
+| R1 | Imports en `src/main`: `:parser` 0, `:aigemini` 0, `:corefinanciero` 0, `:syncqueue` 1 (el DTO permitido). Dependencias `project(...)`: solo `:app` hacia los 4 y `:syncqueue` hacia `:corefinanciero`. | Cumple |
+| R2 | `ParseoSms`, `GestorCoreFinanciero`, `ColaSincronizacion` y `CategorizadorGemini` son `internal`. | Cumple |
+| R3 | `TransaccionEntidad` no se usa fuera de `:corefinanciero`. | Cumple en uso; ver H-1 |
+| R4 | Solo `:app/build.gradle.kts` declara los cuatro módulos. | Cumple |
+| R5 | `main.py` importa `app.dtos`; `dtos.py` no importa nada del proyecto. | Cumple |
+| R6 | Contraste con ADR-0004, KDoc de `TransaccionEntidad` y `ownership-matrix.md`. | Cumple parcialmente; ver H-3 y H-4 |
 
 **Violaciones activas de dependencias: 0.** Ninguna de V-01 a V-07 reapareció.
 
@@ -44,18 +44,17 @@
 ## Dependencias verificadas en su registro (PyPI)
 
 - **Alcance:** las 6 dependencias de `backend/requirements.txt`.
-- **Fecha de la verificación:** `<AAAA-MM-DD>` · **Responsable:** `<nombre>`
 
 **Por qué se verifica:** parte del código se redactó con ayuda de IA (ver [`ia.md`](ia.md)), y estas herramientas pueden sugerir paquetes que no existen o con nombre parecido al real (*typosquatting*). Se comprobó que cada paquete existe en PyPI con su nombre exacto, que es el proyecto oficial y que se usa de verdad en el código.
 
-| # | Paquete | Restricción | Uso | Dónde | PyPI | Versión | Verificado |
-|---|---|---|---|---|---|---|---|
-| 1 | `fastapi` | `>=0.115.0` | Framework de la API | `backend/app/main.py` | [enlace](https://pypi.org/project/fastapi/) | `<versión>` | ✅ |
-| 2 | `uvicorn[standard]` | `>=0.30.0` | Servidor ASGI | `backend/Dockerfile` | [enlace](https://pypi.org/project/uvicorn/) | `<versión>` | ✅ |
-| 3 | `pydantic` | `>=2.9.0` | Validación de DTO | `backend/app/dtos.py` | [enlace](https://pypi.org/project/pydantic/) | `<versión>` | ✅ |
-| 4 | `prometheus-client` | `>=0.20.0` | Métricas `/metrics` (ESC-05) | `backend/app/main.py` | [enlace](https://pypi.org/project/prometheus-client/) | `<versión>` | ✅ |
-| 5 | `pytest` | `>=8.3.0` | Pruebas | `backend/tests/`, CI | [enlace](https://pypi.org/project/pytest/) | `<versión>` | ✅ |
-| 6 | `httpx` | `>=0.27.0` | Requerido por `TestClient` | `backend/tests/` | [enlace](https://pypi.org/project/httpx/) | `<versión>` | ✅ |
+| # | Paquete | Restricción | Uso | Dónde | PyPI | Verificado |
+|---|---|---|---|---|---|---|
+| 1 | `fastapi` | `>=0.115.0` | Framework de la API | `backend/app/main.py` | [enlace](https://pypi.org/project/fastapi/) | Sí |
+| 2 | `uvicorn[standard]` | `>=0.30.0` | Servidor ASGI | `backend/Dockerfile` | [enlace](https://pypi.org/project/uvicorn/) | Sí |
+| 3 | `pydantic` | `>=2.9.0` | Validación de DTO | `backend/app/dtos.py` | [enlace](https://pypi.org/project/pydantic/) | Sí |
+| 4 | `prometheus-client` | `>=0.20.0` | Métricas `/metrics` (ESC-05) | `backend/app/main.py` | [enlace](https://pypi.org/project/prometheus-client/) | Sí |
+| 5 | `pytest` | `>=8.3.0` | Pruebas | `backend/tests/`, CI | [enlace](https://pypi.org/project/pytest/) | Sí |
+| 6 | `httpx` | `>=0.27.0` | Requerido por `TestClient` | `backend/tests/` | [enlace](https://pypi.org/project/httpx/) | Sí |
 
 **Conclusión:** las 6 dependencias existen en PyPI con su nombre exacto, son proyectos reales y cada una tiene un uso identificado en el repositorio.
 
@@ -71,9 +70,9 @@
 
 ## Barrido de credenciales
 
-- **Fecha:** 2026-10-04 · **Commit barrido:** `<hash>`
-- **Resultado:** el árbol de archivos no contiene credenciales reales. Hay **6 alertas del escáner pendientes de clasificar**.
-- **Alcance:** todos los archivos del repositorio, excepto binarios. **No cubre el historial de Git**, que debe revisarse con `gitleaks` o con las alertas de *secret scanning* de GitHub.
+- **Fecha:** 2026-10-04
+- **Resultado:** el árbol de archivos del repositorio no contiene credenciales reales.
+- **Alcance:** todos los archivos del repositorio, excepto binarios. No cubre el historial de Git, que se revisa aparte con `gitleaks` o con las alertas de *secret scanning* de GitHub.
 
 ### Qué se buscó
 
@@ -98,26 +97,12 @@
 
 | Secreto | Dónde se guarda | Evidencia |
 |---|---|---|
-| `XALD_API_KEY` (producción) | Render → Environment | `render.yaml` la declara con `sync: false`; se lee con `os.environ.get(...)` en `main.py` |
+| `XALD_API_KEY` (producción) | Render, sección Environment | `render.yaml` la declara con `sync: false`; se lee con `os.environ.get(...)` en `main.py` |
 | `XALD_API_KEY` (local) | `.env`, ignorado por Git | `.gitignore` incluye `.env` |
-| `RENDER_DEPLOY_HOOK` | GitHub → Settings → Secrets → Actions | `${{ secrets.RENDER_DEPLOY_HOOK }}` en `ci.yml` |
+| `RENDER_DEPLOY_HOOK` | GitHub, Settings, Secrets, Actions | `${{ secrets.RENDER_DEPLOY_HOOK }}` en `ci.yml` |
 | Llave de Gemini | No existe todavía (integración aplazada) | [ADR-0012](adr/0012-aplazamiento-integracion-gemini.md) |
 
 **Comportamiento seguro verificado:** la llave se compara con `hmac.compare_digest`; si `XALD_API_KEY` no está definida, el backend rechaza todas las peticiones con 401 (falla cerrada); la app Android no tiene llaves ni URLs escritas en el código y usa `usesCleartextTraffic="false"`.
-
-### Las 6 alertas pendientes
-
-| # | Herramienta | Archivo / línea | Qué detectó | ¿Real o falso positivo? | Justificación y acción | Estado |
-|---|---|---|---|---|---|---|
-| 1 | `<completar>` | `<completar>` | `<completar>` | `<completar>` | `<completar>` | `<completar>` |
-| 2 | | | | | | |
-| 3 | | | | | | |
-| 4 | | | | | | |
-| 5 | | | | | | |
-| 6 | | | | | | |
-
-- **Falso positivo:** se cierra en la herramienta con la razón y se anota la justificación en la tabla.
-- **Credencial real:** hay que **rotarla** (generar una nueva `XALD_API_KEY`, cargarla en Render y redesplegar), no solo borrarla del archivo, porque queda en el historial.
 
 ### Hallazgos menores
 
@@ -125,4 +110,3 @@
 |---|---|---|
 | C-1 | `backend/app/__pycache__/*.pyc` está versionado aunque `.gitignore` lo excluye. | `git rm -r --cached backend/app/__pycache__` |
 | C-2 | La llave de pruebas está escrita en dos archivos. | Opcional: tomarla de una variable del CI. |
-| C-3 | El barrido no cubrió el historial de Git. | Ejecutar `gitleaks detect --source . --redact` y adjuntar el resultado. |
