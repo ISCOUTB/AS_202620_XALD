@@ -49,15 +49,3 @@ Cada integración entre componentes que cruza la red puede fallar de tres manera
 | Los reenvíos idénticos se cuentan como conflictos y no se distinguen de un conflicto real | Apartado de idempotencia (§8) | Diseño definido; cambio en `main.py` pendiente |
 | La llave de Gemini no tiene mecanismo de gestión definido y falta decidir si la integración se extrae al backend | ADR-0012, ADR-0013 | Integración real aplazada; reevaluar según los disparadores del ADR-0013 |
 
-## Modos de fallo de la integración
-
-Esta tabla recoge los tres modos de fallo que puede tener cada integración externa del sistema (Gemini y Backend XALD), con su mitigación y su estado real en el código.
-
-| Integración | Modo de fallo | Qué ocurre | Mitigación | Estado |
-|---|---|---|---|---|
-| Gemini | **No responde** | No hay respuesta en 5 s; la transacción queda sin categoría | Hasta 3 reintentos con espera creciente (~2 s, ~4 s). Si todos fallan, se guarda como "Sin Categorizar" y no se pierde (ESC-02) | Pendiente: la integración es un mock ([ADR-0012](../adr/0012-aplazamiento-integracion-gemini.md)) |
-| Gemini | **Responde tarde** | La respuesta llega después del corte de 5 s y podría pisar una categoría ya asignada | Se trata como fallo: la respuesta tardía se descarta y la transacción se atiende en la reclasificación posterior | Pendiente |
-| Gemini | **Responde dos veces** | Un reintento y el intento original responden ambos, con dos categorías para la misma transacción | Solo se aplica la categoría si la transacción sigue "Sin Categorizar"; la segunda respuesta se ignora | Pendiente |
-| Backend XALD | **No responde** | No llega un 2xx; la transacción sigue sin sincronizar | Permanece en la cola y se reenvía al reconectar, en orden cronológico | Parcial: encolado implementado; envío y reintento pendientes (no hay cliente HTTP) |
-| Backend XALD | **Responde tarde** | La respuesta llega cuando el cliente ya expiró y reenvía una transacción que el backend sí registró | Idempotencia por `id_transaccion`: el reenvío no duplica el registro | Parcial: LWW implementado; separar duplicado de conflicto está pendiente |
-| Backend XALD | **Responde dos veces** (recibe la misma transacción dos veces) | Llegan dos peticiones con el mismo `id_transaccion` | Idempotencia por `id_transaccion` y resolución LWW ([ADR-0011](../adr/0011-resolucion-conflictos-lww.md)) | Parcial: verificado con `test_lww.py` y ESC-05; el estado vive en memoria |
