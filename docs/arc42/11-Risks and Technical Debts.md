@@ -42,3 +42,22 @@ Cada integración entre componentes que cruza la red puede fallar de tres manera
 | Backend **no responde** al sincronizar | La transacción permanece en la cola y se reenvía al reconectar, en orden cronológico | arc42 §1 | `ColaSincronizacion` guarda en memoria (`mutableListOf`); no hay cliente HTTP ni reenvío | **Parcial:** encolado implementado; envío y reintento pendientes ([EVIDENCIA-S9.md](../EVIDENCIA-S9.md), H-3) |
 | Backend recibe la **misma transacción dos veces** | LWW por `id_transaccion` e idempotencia por reenvío | [ADR-0011](../adr/0011-resolucion-conflictos-lww.md), apartado de idempotencia en §8 | `backend/app/main.py` (`ultima_version`) con pruebas en `backend/tests/test_lww.py` | **Parcial:** LWW implementado y medido (ESC-05); no distingue duplicado de conflicto |
 | Backend **pierde su estado** al reiniciarse | Persistencia del estado, junto con la migración a SQLite/Room | ADR-0011, `aspectos.md` (A-02) | El estado vive solo en memoria | **Pendiente declarado** |
+
+| La integración con Gemini es un *mock* (`CategorizadorGemini.kt`): no hay llamada real, timeout ni reintentos, y la categorización no usa IA | ADR-0012 | Aplazada de forma explícita; el contrato `ServicioCategorizacion` aísla el punto de reemplazo |
+| La cola de sincronización guarda en memoria y no tiene cliente HTTP, por lo que aún no envía transacciones al backend | `EVIDENCIA-S9.md` (H-3), `aspectos.md` (A-03) | Sin mitigación todavía; pendiente de implementación |
+| El backend guarda `ultima_version` solo en memoria: se pierde al reiniciar o cuando Render Free duerme el servicio | ADR-0011 | Aceptada para este corte; persistencia pendiente (A-02) |
+| Los reenvíos idénticos se cuentan como conflictos y no se distinguen de un conflicto real | Apartado de idempotencia (§8) | Diseño definido; cambio en `main.py` pendiente |
+| La llave de Gemini no tiene mecanismo de gestión definido y falta decidir si la integración se extrae al backend | ADR-0012, ADR-0013 | Integración real aplazada; reevaluar según los disparadores del ADR-0013 |
+
+## Modos de fallo de la integración
+
+Esta tabla recoge los tres modos de fallo que puede tener cada integración externa del sistema (Gemini y Backend XALD), con su mitigación y su estado real en el código.
+
+| Integración | Modo de fallo | Qué ocurre | Mitigación | Estado |
+|---|---|---|---|---|
+| Gemini | **No responde** | No hay respuesta en 5 s; la transacción queda sin categoría | Hasta 3 reintentos con espera creciente (~2 s, ~4 s). Si todos fallan, se guarda como "Sin Categorizar" y no se pierde (ESC-02) | Pendiente: la integración es un mock ([ADR-0012](../adr/0012-aplazamiento-integracion-gemini.md)) |
+| Gemini | **Responde tarde** | La respuesta llega después del corte de 5 s y podría pisar una categoría ya asignada | Se trata como fallo: la respuesta tardía se descarta y la transacción se atiende en la reclasificación posterior | Pendiente |
+| Gemini | **Responde dos veces** | Un reintento y el intento original responden ambos, con dos categorías para la misma transacción | Solo se aplica la categoría si la transacción sigue "Sin Categorizar"; la segunda respuesta se ignora | Pendiente |
+| Backend XALD | **No responde** | No llega un 2xx; la transacción sigue sin sincronizar | Permanece en la cola y se reenvía al reconectar, en orden cronológico | Parcial: encolado implementado; envío y reintento pendientes (no hay cliente HTTP) |
+| Backend XALD | **Responde tarde** | La respuesta llega cuando el cliente ya expiró y reenvía una transacción que el backend sí registró | Idempotencia por `id_transaccion`: el reenvío no duplica el registro | Parcial: LWW implementado; separar duplicado de conflicto está pendiente |
+| Backend XALD | **Responde dos veces** (recibe la misma transacción dos veces) | Llegan dos peticiones con el mismo `id_transaccion` | Idempotencia por `id_transaccion` y resolución LWW ([ADR-0011](../adr/0011-resolucion-conflictos-lww.md)) | Parcial: verificado con `test_lww.py` y ESC-05; el estado vive en memoria |
