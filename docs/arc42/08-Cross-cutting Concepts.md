@@ -49,3 +49,40 @@ Cada módulo del proyecto representa un **Bounded Context** (Contexto Delimitado
 * **Offline-First (A-01):** `TransaccionEntidad` es la fuente primaria de verdad local. `ColaSincronizacion` retiene los cambios locales mientras no exista conectividad a internet.
 * **Cifrado AES-256:** Cifra la persistencia en reposo de `TransaccionEntidad` dentro del contenedor del módulo `:corefinanciero`.
 * **Cifrado TLS 1.3:** Protege la comunicación en tránsito en dos fronteras externas: desde `CategorizadorGemini` hacia la API de Gemini, y desde `ColaSincronizacion` hacia el Backend XALD.
+
+* ## Diseño de idempotencia en la sincronización
+
+### Problema
+
+La cola de sincronización entrega las transacciones con la garantía de "al menos una vez": si el dispositivo no recibe la respuesta del backend (se corta la red o expira el tiempo), reenvía la misma transacción. Por eso el backend puede recibir la misma transacción dos veces, y ese reenvío no debe producir un segundo registro ni alterar saldos.
+
+### Diseño
+
+**Clave de idempotencia.** `id_transaccion` (UUID generado en el dispositivo, definido en `backend/app/dtos.py`) identifica de forma única cada transacción. El cliente la conserva en la cola hasta recibir una respuesta 2xx.
+
+**Comportamiento del receptor** (`POST /api/v1/transacciones`):
+
+| Caso | Condición | Respuesta | Efecto |
+|---|---|---|---|
+| Primera recepción | `id_transaccion` no existe | 202 `ACEPTADO` | Se guarda la versión. |
+| Reenvío idéntico | mismo `id_transaccion` y misma `fecha_transaccion` | 202 `ACEPTADO` (misma respuesta) | Sin cambios. Se cuenta como duplicado, no como conflicto. |
+| Conflicto real | mismo `id_transaccion`, distinta `fecha_transaccion` | 202 `ACEPTADO` | Se aplica Last-Write-Wins ([ADR-0011](../adr/0011-resolucion-conflictos-lww.md)) y se cuenta como conflicto resuelto. |
+
+Con entrega "al menos una vez" y un receptor idempotente, el efecto neto es el de "exactamente una vez".
+
+**Diferencia con el código actual.** `registrar_transaccion` en `backend/app/main.py` incrementa `xald_sync_conflictos_resueltos_total` siempre que existe una versión previa, incluso si es un reenvío idéntico. Para cumplir este diseño hay que separar ambos casos y agregar un contador `xald_sync_duplicados_total`. Este cambio está **pendiente**.
+
+### Saga: por qué no aplica
+
+Una saga coordina operaciones que modifican datos en varios servicios y necesita compensaciones si una falla a mitad de camino. En XALD no se da esa situación:
+
+* El registro de la transacción es una operación local en `:corefinanciero`, y ocurre antes de cualquier llamada externa.
+* La categorización (Gemini) y la sincronización (backend) son pasos posteriores que no deshacen el registro: si fallan, se reintentan o la transacción queda "Sin Categorizar", pero no se compensa nada.
+* Solo hay un servicio que escribe estado remoto (el backend), así que no hay transacción distribuida que coordinar.
+
+Si en el futuro se extrae un servicio que también modifique estado (ver [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md)), este argumento debe revisarse.
+
+### Limitaciones declaradas
+
+* El estado de deduplicación (`ultima_version`) vive en memoria y se pierde con cada reinicio o cuando Render duerme el servicio. Un reenvío posterior al reinicio se tratará como primera recepción. Se resuelve junto con la persistencia pendiente (A-02 en `aspectos.md`).
+* La resolución depende de que el reloj del dispositivo sea confiable, riesgo ya registrado en arc42 §10.
