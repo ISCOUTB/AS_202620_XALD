@@ -452,6 +452,47 @@ Cada módulo del proyecto representa un **Bounded Context** (Contexto Delimitado
 * **Cifrado AES-256:** Cifra la persistencia en reposo de `TransaccionEntidad` dentro del contenedor del módulo `:corefinanciero`.
 * **Cifrado TLS 1.3:** Protege la comunicación en tránsito en dos fronteras externas: desde `CategorizadorGemini` hacia la API de Gemini, y desde `ColaSincronizacion` hacia el Backend XALD.
 
+---
+
+## 8.5 Diseño de idempotencia en la sincronización
+
+### Problema
+
+La cola de sincronización entrega las transacciones con la garantía de "al menos una vez": si el dispositivo no recibe la respuesta del backend (se corta la red o expira el tiempo), reenvía la misma transacción. Por eso el backend puede recibir la misma transacción dos veces, y ese reenvío no debe producir un segundo registro ni alterar saldos.
+
+### Diseño
+
+**Clave de idempotencia.** `id_transaccion` (UUID generado en el dispositivo, definido en `backend/app/dtos.py`) identifica de forma única cada transacción. El cliente la conserva en la cola hasta recibir una respuesta 2xx.
+
+**Comportamiento del receptor** (`POST /api/v1/transacciones`):
+
+| Caso | Condición | Respuesta | Efecto |
+|---|---|---|---|
+| Primera recepción | `id_transaccion` no existe | 202 `ACEPTADO` | Se guarda la versión. |
+| Reenvío idéntico | mismo `id_transaccion` y misma `fecha_transaccion` | 202 `ACEPTADO` (misma respuesta) | Sin cambios. Se cuenta como duplicado, no como conflicto. |
+| Conflicto real | mismo `id_transaccion`, distinta `fecha_transaccion` | 202 `ACEPTADO` | Se aplica Last-Write-Wins ([ADR-0011](../adr/0011-resolucion-conflictos-lww.md)) y se cuenta como conflicto resuelto. |
+
+Con entrega "al menos una vez" y un receptor idempotente, el efecto neto es el de "exactamente una vez".
+
+**Implementación.** `registrar_transaccion` en `backend/app/main.py` separa los dos casos: un reenvío idéntico responde 202 sin modificar `ultima_version` e incrementa `xald_sync_duplicados_total`; solo un conflicto real incrementa `xald_sync_conflictos_resueltos_total`. Lo verifican `test_mf03_reenvio_identico_es_idempotente_y_no_cuenta_como_conflicto` y `test_mf03_conflicto_real_sigue_contando_como_conflicto` en `backend/tests/test_lww.py` (modo de fallo MF-03, [Sección 11](11-Risks%20and%20Technical%20Debts.md)).
+
+**Lado del cliente (pendiente, plan P-02 de la Sección 11).** La cola debe retirar un elemento solo cuando recibe una respuesta 2xx. Hoy `obtenerSiguienteParaSincronizar()` no lo retira y la app aún no tiene cliente HTTP.
+
+### Saga: por qué no aplica
+
+Una saga coordina operaciones que modifican datos en varios servicios y necesita compensaciones si una falla a mitad de camino. En XALD no se da esa situación:
+
+* El registro de la transacción es una operación local en `:corefinanciero`, y ocurre antes de cualquier llamada externa.
+* La categorización (Gemini) y la sincronización (backend) son pasos posteriores que no deshacen el registro: si fallan, se reintentan o la transacción queda "Sin Categorizar", pero no se compensa nada.
+* Solo hay un servicio que escribe estado remoto (el backend), así que no hay transacción distribuida que coordinar.
+
+Si en el futuro se extrae un servicio que también modifique estado (ver [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md)), este argumento debe revisarse.
+
+### Limitaciones declaradas
+
+* El estado de deduplicación (`ultima_version`) vive en memoria y se pierde con cada reinicio o cuando Render duerme el servicio. Un reenvío posterior al reinicio se tratará como primera recepción. Se resuelve junto con la persistencia pendiente (A-02 en `aspectos.md`, plan P-04 de la Sección 11).
+* La resolución depende de que el reloj del dispositivo sea confiable, riesgo ya registrado en arc42 §10.
+
 # Architecture Decisions
 
 Las decisiones arquitectónicas del proyecto se registran como ADR (Architecture Decision Record) individuales en `docs/adr/`, siguiendo la convención de nombre `NNNN-titulo-en-kebab-case.md`. Cada decisión responde a un objetivo de negocio o de calidad de la Sección 1, y varias se verifican mediante los escenarios de calidad de la Sección 10.
@@ -464,6 +505,13 @@ Las decisiones arquitectónicas del proyecto se registran como ADR (Architecture
 | [ADR-0004](../adr/0004-seguridad-y-cifrado.md) | Modelo de Seguridad Acotado y Cifrado de Datos | Enfocar la seguridad en dos capas: cifrado local en reposo (AES-256 vía Android Keystore) y cifrado en tránsito (HTTPS/TLS). | Objetivo de calidad 3 (Seguridad básica) · RT-03 · RL-01 · ESC-04 |
 | [ADR-0005](../adr/0005-reduccion-de-funcionalidades.md) | Alcance Reducido en el Módulo de Analítica y Reportes (MVP) | Reducir el módulo de reportes a lo esencial (saldos consolidados, gráficos básicos, lista de movimientos), dejando fuera el motor avanzado de analítica y predicción. | RO-01 |
 | [ADR-0006](../adr/0006-seleccion-de-estilo-arquitectonico.md) | Selección de Estilo Arquitectónico — Monolito Modular | Adoptar un monolito modular organizado por paquetes de dominio (`parser`, `corefinanciero`, `syncqueue`, `aigemini`), en vez de arquitectura por capas o hexagonal. | RO-01 · Objetivo de calidad 5 (Modificabilidad) |
+| [ADR-0007](../adr/0007-contratos-por-modulo.md) | Contratos Públicos por Módulo y Orquestación Centralizada | Cada módulo expone una única interfaz pública (`internal` en Kotlin); toda la coordinación entre contextos ocurre en `:app` mediante `ProcesarNotificacionUseCase`. | Auditoría de violaciones semana 6 (V-01 a V-07) |
+| [ADR-0008](../adr/0008-plataforma-de-despliegue.md) | Selección de Plataforma de Despliegue para el Backend XALD | Desplegar el Backend XALD como Web Service Docker en el plan Free de Render, definido como código en `render.yaml`, sin tarjeta de crédito. | RO-02 · RO-03 · Sección 7 (Deployment View) |
+| [ADR-0009](../adr/0009-distribucion-app.md) | Distribución de la Aplicación Móvil como APK Directo | Distribuir el APK generado por Gradle directamente vía GitHub Releases (sideloading), sin publicar en Google Play en este corte. | RO-01 · RO-02 · RO-03 · RT-01 |
+| [ADR-0010](../adr/0010-observabilidad.md) | Observabilidad con Logs JSON y Métricas Prometheus Embebidas | Exponer logs estructurados en JSON (stdout) y un endpoint `/metrics` en formato Prometheus dentro del propio backend, sin plataforma de monitoreo externa. | RO-02 · RO-03 · ESC-05 |
+| [ADR-0011](../adr/0011-resolucion-conflictos-lww.md) | Implementación de Resolución de Conflictos Last-Write-Wins (LWW) | El backend conserva la última versión por `id_transaccion` y resuelve los conflictos por fecha de transacción; los reenvíos idénticos se tratan de forma idempotente (§8.5). | RT-05 · ESC-05 · MF-03 |
+| [ADR-0012](../adr/0012-aplazamiento-integracion-gemini.md) | Aplazamiento de la Integración Real con la API de Gemini | Mantener `CategorizadorGemini` como *mock* detrás del contrato `ServicioCategorizacion` hasta definir cómo se protege la llave. | ESC-02 · MF-04 a MF-06 |
+| [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md) | Extraer o no extraer la integración con Gemini como servicio independiente | **No extraer** en este corte: `:aigemini` sigue en el monolito modular; se evaluaron explícitamente "no extraer" y "extraer al backend", con disparadores para reevaluar. | ADR-0006 · ADR-0007 · ESC-02 · Sección 11 |
 
 # Quality Requirements
 
@@ -575,7 +623,7 @@ Los escenarios calificados **(A, A)** y **(A, M)** son los que condicionan las d
 
 # Risks and Technical Debts
 
-Esta sección consolida los riesgos y deudas técnicas que ya quedaron documentados individualmente en cada ADR (Sección 9) y en la Sección 6.
+Esta sección consolida los riesgos y deudas técnicas que ya quedaron documentados individualmente en cada ADR (Sección 9) y en la Sección 6, junto con los modos de fallo de las integraciones identificados en la semana 11.
 
 | Riesgo / Deuda técnica | Origen | Mitigación actual |
 | --- | --- | --- |
@@ -586,21 +634,52 @@ Esta sección consolida los riesgos y deudas técnicas que ya quedaron documenta
 | El sistema no soporta ataques avanzados a gran escala ni alta concurrencia masiva | ADR-0004 | Aceptada porque el alcance actual es solo grupos reducidos de prueba |
 | Menor profundidad en el análisis financiero avanzado para el usuario final | ADR-0005 | Aceptada como parte del recorte a MVP; podría revisarse en una futura iteración |
 | Riesgo de acoplamiento indeseado entre paquetes por importación directa de clases | ADR-0006 | Mitigado con el modificador `internal` de Kotlin para los componentes que no son parte de la interfaz pública del módulo |
-| La reclasificación automática de transacciones "Sin Categorizar" (mencionada en ESC-02) depende de un componente que **todavía no está implementado** en el código | Sección 6 — Runtime View | Sin mitigación todavía; queda pendiente de diseño e implementación |
+| La reclasificación automática de transacciones "Sin Categorizar" (mencionada en ESC-02) depende de un componente que **todavía no está implementado** en el código | Sección 6 — Runtime View | Sin mitigación todavía; ver plan P-05 |
 | La resolución de conflictos entre dispositivos (ESC-05) depende de que los relojes de los dispositivos sean razonablemente confiables | Árbol de utilidad — Sección 10 | Ninguna formalizada; es el escenario de mayor riesgo técnico del proyecto (Riesgo: Alta) |
+| La integración con Gemini es un *mock* (`CategorizadorGemini.kt`): no hay llamada real, timeout ni reintentos, y la categorización no usa IA | ADR-0012 | Aplazada de forma explícita; el contrato `ServicioCategorizacion` aísla el punto de reemplazo. Ver MF-04 a MF-06 y plan P-03 |
+| La cola de sincronización guarda en memoria y no tiene cliente HTTP, por lo que aún no envía transacciones al backend | `EVIDENCIA-S9.md` (H-3), `aspectos.md` (A-03) | Sin mitigación todavía. Ver MF-01, MF-02 y plan P-01 |
+| El backend guarda `ultima_version` solo en memoria: se pierde al reiniciar o cuando Render Free duerme el servicio | ADR-0011 | Aceptada para este corte; persistencia pendiente (A-02). Ver plan P-04 |
+| El payload de Android (`PayloadSincronizacionDTO`) no incluye `moneda`, `categoria` ni `origen_datos`, que el backend exige en `TransaccionDTO`: la primera sincronización real respondería 422 | `aspectos.md` (A-03) | Sin mitigación todavía; se alinea el contrato dentro del plan P-01 |
+| La llave de Gemini no tiene mecanismo de gestión definido | ADR-0012, ADR-0013 | Integración real aplazada; si la llave no puede protegerse en el cliente se dispara la reevaluación del [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md) |
 
-## Modos de fallo de las integraciones
+## 11.1 Modos de fallo de las integraciones
 
 Cada integración entre componentes que cruza la red puede fallar de tres maneras: no responde, responde tarde o responde dos veces. La tabla asigna una mitigación a cada modo y declara en qué estado está en el código, para no presentar como implementado lo que solo está diseñado.
 
-| ID | Integración | Modo de fallo | Qué ocurre | Mitigación asignada | Estado en el código |
+| ID | Integración | Modo de fallo | Qué ocurre | Mitigación asignada | Estado en el código | Prueba |
+|---|---|---|---|---|---|---|
+| **MF-01** | `:syncqueue` → Backend (`POST /api/v1/transacciones`, conector 4) | No responde | El backend está caído, no hay red o Render Free lo tiene dormido; el payload no llega. | La transacción ya se guarda en `:corefinanciero` antes de encolarse (pasos 3 y 4 de `ProcesarNotificacionUseCase`), así que el fallo no la pierde. La cola la conserva y la reenvía al volver la conexión, con reintentos de espera creciente. | **Pendiente (P-01).** La app aún no tiene cliente HTTP, y la cola (`ColaSincronizacion`) y el core guardan hoy en memoria (`mutableListOf`). | Sin prueba |
+| **MF-02** | `:syncqueue` → Backend | Responde tarde | El *cold start* de Render Free (duerme tras 15 min sin tráfico) o un backend lento hace esperar al cliente, que podría rendirse y reintentar mientras el primer intento sigue en curso. | Timeout holgado en el cliente, que cubra el cold start, y una petición de calentamiento a `GET /health` antes de sincronizar. Si el cliente se rinde y reintenta, el reenvío lo absorbe la idempotencia de MF-03. La latencia queda visible en los logs (`duracion_ms`). | **Parcial (P-01).** El timeout y el calentamiento están en `backend/scripts/medir_esc05.py` (`timeout=120` y `GET /health`), y `duracion_ms` en el middleware de `backend/app/main.py`. En el cliente de la app: pendiente. | Sin prueba automatizada; `medir_esc05.py` lo ejercita contra Render |
+| **MF-03** | `:syncqueue` → Backend | Responde dos veces | El mismo payload llega dos veces: el cliente reintentó tras perder la respuesta, o la cola reenvía un elemento que no se marcó como enviado (`obtenerSiguienteParaSincronizar()` no lo retira). | Idempotencia por `id_transaccion` (UUID), diseñada en [§8.5](08-Cross-cutting%20Concepts.md). Un reenvío idéntico responde 202 sin cambiar el estado y se cuenta en `xald_sync_duplicados_total`; un conflicto real se resuelve con Last-Write-Wins ([ADR-0011](../adr/0011-resolucion-conflictos-lww.md)). | **Implementada en el backend** (`registrar_transaccion` en `main.py`, contador `xald_sync_duplicados_total`). Límites declarados: el estado vive en memoria y se reinicia con cada despliegue o cuando Render duerme el servicio (P-04); la cola aún no retira lo ya confirmado (P-02). | `test_mf03_reenvio_identico_es_idempotente_y_no_cuenta_como_conflicto` y `test_mf03_conflicto_real_sigue_contando_como_conflicto` en `backend/tests/test_lww.py`; 30/30 en `medir_esc05.py` |
+| **MF-04** | `:aigemini` → Gemini API (conector 2) | No responde | Gemini está caído o no hay conexión; no hay categoría. | Timeout de 5 s y reintentos con espera creciente (~2 s, ~4 s) según la [Sección 6.2](06-Runtime%20view.md). Si se agotan, la transacción se guarda como «Sin Categorizar» (ESC-02). | **Pendiente declarada (P-03).** `CategorizadorGemini` es un *mock* sin llamada de red ([ADR-0012](../adr/0012-aplazamiento-integracion-gemini.md)). `ProcesarNotificacionUseCase` no captura fallos de `categorizar()` ni asigna «Sin Categorizar». | Sin prueba |
+| **MF-05** | `:aigemini` → Gemini API | Responde tarde | Gemini responde después de los 5 s. | El corte de 5 s descarta la respuesta tardía y la cuenta como intento fallido. Si se agotan los intentos se aplica «Sin Categorizar», y la reclasificación posterior retoma la categoría. | **Pendiente declarada (P-03, P-05).** Mismo motivo que MF-04. Además, la reclasificación automática no existe como componente (Sección 6.2). | Sin prueba |
+| **MF-06** | `:aigemini` → Gemini API | Responde dos veces | Un reintento tras un timeout puede traer dos respuestas para el mismo comercio: la tardía del primer intento y la del segundo. | La llamada solo consulta (sin efecto secundario externo) y la categorización es idempotente: se conserva la primera respuesta aceptada y se ignora la siguiente. | **Pendiente declarada (P-03).** No hay integración real todavía; la regla debe implementarse junto con el cliente real. | Sin prueba |
+
+## 11.2 Correspondencia entre mitigaciones declaradas e implementadas
+
+*Fecha de contraste con el código: octubre 2026 (semana 11).*
+
+| Modo de fallo | Mitigación declarada | Dónde se declara | Implementación en el código | Estado |
+|---|---|---|---|---|
+| Gemini **no responde** (timeout) | Corte a 5 s y hasta 3 reintentos con espera creciente (~2 s, ~4 s) | arc42 §6 (ESC-02), §10 | `XALDAPP/aigemini/src/main/java/CategorizadorGemini.kt` es un mock; no hay cliente HTTP, timeout ni reintentos | **Pendiente declarado** ([ADR-0012](../adr/0012-aplazamiento-integracion-gemini.md)) — plan P-03 |
+| Gemini **falla tras los reintentos** | Guardar la transacción como "Sin Categorizar"; no se pierde el registro | arc42 §6 (ESC-02), §10 | El mock siempre devuelve una categoría, así que esta rama no existe | **Pendiente declarado** — plan P-03 |
+| Reclasificación posterior al volver el servicio | Reclasificar automáticamente las "Sin Categorizar" | arc42 §6, §11 | No existe el componente | **Pendiente declarado** — plan P-05 |
+| Gemini **responde tarde** (después del corte de 5 s) | Se trata como fallo: la respuesta tardía se descarta y la transacción se atiende en la reclasificación posterior | Esta tabla | No implementado | **Pendiente declarado** — plan P-03 |
+| Backend **no responde** al sincronizar | La transacción permanece en la cola y se reenvía al reconectar, en orden cronológico | arc42 §1 | `ColaSincronizacion` guarda en memoria (`mutableListOf`); no hay cliente HTTP ni reenvío | **Parcial:** encolado implementado; envío y reintento pendientes ([EVIDENCIA-S9.md](../EVIDENCIA-S9.md), H-3) — plan P-01 |
+| Backend recibe la **misma transacción dos veces** | Idempotencia por `id_transaccion`; LWW solo para conflictos reales | [ADR-0011](../adr/0011-resolucion-conflictos-lww.md), §8.5 | `backend/app/main.py` (`ultima_version`, `xald_sync_duplicados_total`) con pruebas en `backend/tests/test_lww.py` | **Implementado y probado** en el backend; la cola debe retirar lo confirmado — plan P-02 |
+| Backend **pierde su estado** al reiniciarse | Persistencia del estado, junto con la migración a SQLite/Room | ADR-0011, `aspectos.md` (A-02) | El estado vive solo en memoria | **Pendiente declarado** — plan P-04 |
+
+## 11.3 Plan para las mitigaciones pendientes
+
+Cada pendiente de las tablas anteriores tiene un paso concreto, una semana objetivo y la prueba que lo dará por cerrado. Lo que no llegue a la semana objetivo se reporta en `correcciones.md` con su nueva fecha.
+
+| ID | Qué se implementa | Modos de fallo que cierra | Semana objetivo | Responsable | Cómo se verifica |
 |---|---|---|---|---|---|
-| **MF-01** | `:syncqueue` → Backend (`POST /api/v1/transacciones`, conector 4) | No responde | El backend está caído, no hay red o Render Free lo tiene dormido; el payload no llega. | La transacción ya se guarda en `:corefinanciero` antes de encolarse (pasos 3 y 4 de `ProcesarNotificacionUseCase`), así que el fallo no la pierde. La cola la conserva y la reenvía al volver la conexión, con reintentos de espera creciente. | **Pendiente.** La app aún no tiene cliente HTTP, y la cola (`ColaSincronizacion`) y el core guardan hoy en memoria (`mutableListOf`). |
-| **MF-02** | `:syncqueue` → Backend | Responde tarde | El *cold start* de Render Free (duerme tras 15 min sin tráfico) o un backend lento hace esperar al cliente, que podría rendirse y reintentar mientras el primer intento sigue en curso. | Timeout holgado en el cliente, que cubra el cold start, y una petición de calentamiento a `GET /health` antes de sincronizar. La latencia queda visible en los logs (`duracion_ms`). | **Parcial.** El timeout y el calentamiento están en `backend/scripts/medir_esc05.py` (`timeout=120` y `GET /health`), y `duracion_ms` en el middleware de `backend/app/main.py`. En el cliente de la app: pendiente. |
-| **MF-03** | `:syncqueue` → Backend | Responde dos veces | El mismo payload llega dos veces: el cliente reintentó tras perder la respuesta, o la cola reenvía un elemento que no se marcó como enviado (`obtenerSiguienteParaSincronizar()` no lo retira). | Idempotencia por `id_transaccion` (UUID). El backend guarda la última versión por id y resuelve con Last-Write-Wins ([ADR-0011](../adr/0011-resolucion-conflictos-lww.md)), así que reenviar la misma transacción no crea un registro nuevo. | **Implementada en el backend** (`ultima_version` y LWW en `main.py`; `backend/tests/test_lww.py`; 30/30 en `medir_esc05.py`). Límites declarados: el estado vive en memoria y se reinicia con cada despliegue o cuando Render duerme el servicio, y el contador `xald_transacciones_recibidas_total` sí cuenta el reenvío (la métrica se infla, el dato no se duplica). Pendiente: clave única en la persistencia remota y que la cola retire lo ya confirmado. |
-| **MF-04** | `:aigemini` → Gemini API (conector 2) | No responde | Gemini está caído o no hay conexión; no hay categoría. | Timeout de 5 s y reintentos con espera creciente (~2 s, ~4 s) según la [Sección 6.2](06-Runtime%20view.md). Si se agotan, la transacción se guarda como «Sin Categorizar» (ESC-02). | **Pendiente (declarada).** `CategorizadorGemini` es un *mock* sin llamada de red ([ADR-0012](../adr/0012-aplazamiento-integracion-gemini.md)). `ProcesarNotificacionUseCase` no captura fallos de `categorizar()` ni asigna «Sin Categorizar». |
-| **MF-05** | `:aigemini` → Gemini API | Responde tarde | Gemini responde después de los 5 s. | El corte de 5 s descarta la respuesta tardía y la cuenta como intento fallido. Si se agotan los intentos se aplica «Sin Categorizar», y la reclasificación posterior retoma la categoría. | **Pendiente (declarada).** Mismo motivo que MF-04. Además, la reclasificación automática no existe como componente (Secciones 6.2 y 11). |
-| **MF-06** | `:aigemini` → Gemini API | Responde dos veces | Un reintento tras un timeout puede traer dos respuestas para el mismo comercio: la tardía del primer intento y la del segundo. | La llamada solo consulta (sin efecto secundario externo) y la categorización es idempotente: se conserva la primera respuesta aceptada y se ignora la siguiente. | **Pendiente (declarada).** No hay integración real todavía; la regla debe implementarse junto con el cliente real. |
+| **P-01** | Cliente HTTP en `:syncqueue` (timeout que cubra el cold start, calentamiento con `GET /health` y reintentos con espera creciente) y alineación del payload de Android con `TransaccionDTO` (`moneda`, `categoria`, `origen_datos`) | MF-01, MF-02 | Semana 13 | *Por asignar* | Prueba unitaria con servidor simulado que no responde y que responde tarde: la transacción sigue en la cola y se reintenta |
+| **P-02** | Que `ColaSincronizacion` retire un elemento solo al recibir 2xx (`confirmarEnvio(id)`) | MF-03 (lado cliente) | Semana 13 | *Por asignar* | Prueba unitaria: tras un 202 la cola baja en 1; tras un error, no |
+| **P-03** | Cliente real de Gemini en `CategorizadorGemini` con corte de 5 s, 3 reintentos, «Sin Categorizar» al agotarlos y descarte de respuestas tardías; captura del fallo en `ProcesarNotificacionUseCase` | MF-04, MF-05, MF-06 | Semana 14, condicionada a resolver la llave ([ADR-0012](../adr/0012-aplazamiento-integracion-gemini.md), [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md)) | *Por asignar* | Prueba con un `ServicioCategorizacion` falso que lanza excepción o tarda más de 5 s: la transacción se guarda como «Sin Categorizar» |
+| **P-04** | Persistencia de `ultima_version` en el backend con clave única por `id_transaccion` | MF-03 tras reinicio | Semana 14 | *Por asignar* | Prueba: reiniciar la app de pruebas y reenviar la misma transacción no la cuenta como nueva |
+| **P-05** | Componente de reclasificación de transacciones «Sin Categorizar» | MF-05 | Semana 15 | *Por asignar* | Prueba: al volver el servicio, las transacciones «Sin Categorizar» reciben categoría |
 
 # Glossary
 
