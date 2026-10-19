@@ -16,7 +16,7 @@ Esta sección consolida los riesgos y deudas técnicas que ya quedaron documenta
 
 
 
-
+## Modos de fallo de las integraciones
 
 Cada integración entre componentes que cruza la red puede fallar de tres maneras: no responde, responde tarde o responde dos veces. La tabla asigna una mitigación a cada modo y declara en qué estado está en el código, para no presentar como implementado lo que solo está diseñado.
 
