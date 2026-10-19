@@ -115,6 +115,18 @@ async def registrar_transaccion(transaccion: TransaccionDTO):
     TRANSACCIONES_RECIBIDAS.labels(origen_datos=transaccion.origen_datos.value).inc()
 
     previa = ultima_version.get(transaccion.id_transaccion)
+
+    # Idempotencia (arc42 §8, MF-03): un reenvío idéntico (mismo id y misma fecha)
+    # no es un conflicto. Se responde igual que la primera vez y no cambia el estado.
+    if previa is not None and transaccion.fecha_transaccion == previa:
+        DUPLICADOS.inc()
+        registrar("reenvio_duplicado_ignorado", id_transaccion=transaccion.id_transaccion)
+        return RespuestaSincronizacion(
+            estado="ACEPTADO",
+            id_transaccion=transaccion.id_transaccion,
+            mensaje="Transacción ya recibida previamente; reenvío idempotente sin cambios."
+        )
+
     if previa is None or transaccion.fecha_transaccion > previa:
         ultima_version[transaccion.id_transaccion] = transaccion.fecha_transaccion
     if previa is not None:
