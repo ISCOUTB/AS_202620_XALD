@@ -95,3 +95,38 @@ def test_medicion_esc05_30_transacciones_en_conflicto():
     assert perdidas == 0
     assert resueltos == carga
     assert porcentaje == 100
+
+
+# ---------------------------------------------------------------------------
+# Modo de fallo MF-03 (arc42 §11): el backend "recibe dos veces" la misma
+# transacción porque el cliente reintentó tras perder la respuesta.
+# Diseño de idempotencia: arc42 §8.
+# ---------------------------------------------------------------------------
+def contador(nombre):
+    for linea in client.get("/metrics").text.splitlines():
+        if linea.startswith(f"{nombre} "):
+            return float(linea.split()[1])
+    return 0.0
+
+
+def test_mf03_reenvio_identico_es_idempotente_y_no_cuenta_como_conflicto():
+    id_tx = str(uuid.uuid4())
+    conflictos_antes = contador("xald_sync_conflictos_resueltos_total")
+    duplicados_antes = contador("xald_sync_duplicados_total")
+
+    primera = enviar(id_tx, BASE)
+    reenvio = enviar(id_tx, BASE)
+
+    assert primera.status_code == reenvio.status_code == 202
+    assert reenvio.json()["estado"] == "ACEPTADO"
+    assert main.ultima_version[id_tx] == BASE
+    assert contador("xald_sync_duplicados_total") == duplicados_antes + 1
+    assert contador("xald_sync_conflictos_resueltos_total") == conflictos_antes
+
+
+def test_mf03_conflicto_real_sigue_contando_como_conflicto():
+    id_tx = str(uuid.uuid4())
+    duplicados_antes = contador("xald_sync_duplicados_total")
+    enviar(id_tx, BASE)
+    enviar(id_tx, BASE + timedelta(minutes=1))
+    assert contador("xald_sync_duplicados_total") == duplicados_antes
