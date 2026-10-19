@@ -49,3 +49,31 @@ Hoy la integración con Gemini vive dentro del monolito modular ([ADR-0006](0006
 ## Trazabilidad
 
 [ADR-0006](0006-seleccion-de-estilo-arquitectonico.md) · [ADR-0007](0007-contratos-por-modulo.md) · [ADR-0011](0011-resolucion-conflictos-lww.md) · [ADR-0012](0012-aplazamiento-integracion-gemini.md) · ESC-02 · RL-01
+
+## Opciones Evaluadas
+
+### Opción A: No extraer (Adoptada para este corte)
+
+La llamada a Gemini la hace el módulo `:aigemini` dentro de la app, detrás del contrato `ServicioCategorizacion`. No se crea ningún servicio nuevo.
+
+### Opción B: Extraer a un servicio en el Backend XALD
+
+La app llama a un endpoint de categorización del backend y este llama a Gemini.
+
+### Opción C: Diferir sin decidir (Descartada)
+
+Deja sin criterio explícito el punto donde se conectará la integración real, que es justo lo que el ADR-0012 quiso evitar.
+
+### Comparación de A y B contra los criterios
+
+| Criterio | A: No extraer | B: Extraer |
+|---|---|---|
+| C1 Resiliencia y Offline-First | Favorable: sin dependencia del backend; los reintentos de ESC-02 quedan en `:aigemini` | Desfavorable: dos saltos de red (app → backend → Gemini) y doble manejo de reintentos |
+| C2 Protección de la llave | Desfavorable: la llave tendría que protegerse en el dispositivo | Favorable: la llave vive en las variables de entorno del servidor |
+| C3 Disponibilidad del intermedio | Favorable: no hay intermediario | Desfavorable: el backend guarda estado en memoria y Render Free lo duerme (ADR-0011) |
+| C4 Costo y operación | Favorable: no suma un servicio que operar | Desfavorable: un servicio más que operar y mantener |
+| C5 Latencia (corte de 5 s) | Favorable: un salto de red menos | Desfavorable: el arranque en frío de Render puede superar el corte de 5 s |
+| C6 Modificabilidad | Favorable: el contrato `ServicioCategorizacion` ya aísla el reemplazo | Neutral: el contrato permite el cambio en ambos casos |
+| C7 Privacidad | Neutral: solo se envían comercio y monto | Neutral: igual, pero pasa por un servidor propio adicional |
+
+**Resultado:** A favorece 5 de los 7 criterios (C1, C3, C4, C5 y C6) y B solo favorece C2, que es el riesgo real de A y queda cubierto con los disparadores de reevaluación de la sección siguiente.
