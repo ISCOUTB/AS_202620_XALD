@@ -46,6 +46,10 @@ TRANSACCIONES_RECIBIDAS = Counter(
     "Transacciones recibidas desde la cola de sincronización del dispositivo",
     ["origen_datos"],
 )
+DUPLICADOS = Counter(
+    "xald_sync_duplicados_total",
+    "Reenvíos idénticos (mismo id_transaccion y misma fecha) ignorados por idempotencia (MF-03)",
+)
 CONFLICTOS_RESUELTOS = Counter(
     "xald_sync_conflictos_resueltos_total",
     "Conflictos de sincronización resueltos por Last-Write-Wins (ESC-05)",
