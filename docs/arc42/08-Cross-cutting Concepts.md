@@ -50,7 +50,9 @@ Cada módulo del proyecto representa un **Bounded Context** (Contexto Delimitado
 * **Cifrado AES-256:** Cifra la persistencia en reposo de `TransaccionEntidad` dentro del contenedor del módulo `:corefinanciero`.
 * **Cifrado TLS 1.3:** Protege la comunicación en tránsito en dos fronteras externas: desde `CategorizadorGemini` hacia la API de Gemini, y desde `ColaSincronizacion` hacia el Backend XALD.
 
-* ## Diseño de idempotencia en la sincronización
+---
+
+## 8.5 Diseño de idempotencia en la sincronización
 
 ### Problema
 
@@ -70,7 +72,9 @@ La cola de sincronización entrega las transacciones con la garantía de "al men
 
 Con entrega "al menos una vez" y un receptor idempotente, el efecto neto es el de "exactamente una vez".
 
-**Diferencia con el código actual.** `registrar_transaccion` en `backend/app/main.py` incrementa `xald_sync_conflictos_resueltos_total` siempre que existe una versión previa, incluso si es un reenvío idéntico. Para cumplir este diseño hay que separar ambos casos y agregar un contador `xald_sync_duplicados_total`. Este cambio está **pendiente**.
+**Implementación.** `registrar_transaccion` en `backend/app/main.py` separa los dos casos: un reenvío idéntico responde 202 sin modificar `ultima_version` e incrementa `xald_sync_duplicados_total`; solo un conflicto real incrementa `xald_sync_conflictos_resueltos_total`. Lo verifican `test_mf03_reenvio_identico_es_idempotente_y_no_cuenta_como_conflicto` y `test_mf03_conflicto_real_sigue_contando_como_conflicto` en `backend/tests/test_lww.py` (modo de fallo MF-03, [Sección 11](11-Risks%20and%20Technical%20Debts.md)).
+
+**Lado del cliente (pendiente, plan P-02 de la Sección 11).** La cola debe retirar un elemento solo cuando recibe una respuesta 2xx. Hoy `obtenerSiguienteParaSincronizar()` no lo retira y la app aún no tiene cliente HTTP.
 
 ### Saga: por qué no aplica
 
@@ -84,5 +88,5 @@ Si en el futuro se extrae un servicio que también modifique estado (ver [ADR-00
 
 ### Limitaciones declaradas
 
-* El estado de deduplicación (`ultima_version`) vive en memoria y se pierde con cada reinicio o cuando Render duerme el servicio. Un reenvío posterior al reinicio se tratará como primera recepción. Se resuelve junto con la persistencia pendiente (A-02 en `aspectos.md`).
+* El estado de deduplicación (`ultima_version`) vive en memoria y se pierde con cada reinicio o cuando Render duerme el servicio. Un reenvío posterior al reinicio se tratará como primera recepción. Se resuelve junto con la persistencia pendiente (A-02 en `aspectos.md`, plan P-04 de la Sección 11).
 * La resolución depende de que el reloj del dispositivo sea confiable, riesgo ya registrado en arc42 §10.
