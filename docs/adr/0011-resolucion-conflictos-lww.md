@@ -1,36 +1,61 @@
-# ADR-0011: Implementación de Resolución de Conflictos Last-Write-Wins (LWW)
+# ADR-0011: Resolución de Conflictos con Last-Write-Wins, UUID de Dispositivo y Timestamp del Cliente
 
 * *Estatus:* Decidido
 * *Fecha:* Octubre 2026
-* *Corte:* Tercer corte — Semana 9
+* *Proyecto:* XALDAPP — Aplicación de gestión financiera
+* *Corte:* Semana 9 — consistencia de datos
 
 ## Contexto y Problema
 
-El [ADR-0001](0001-patron-offline-first.md) ya había decidido adoptar Last-Write-Wins como estrategia de resolución de conflictos para la arquitectura Offline-First (RT-05), pero esa decisión era de alto nivel: no existía todavía una implementación real que comparara versiones en conflicto. El equipo necesitaba definir *cómo* implementar esa comparación en el Backend XALD y cómo verificar que cumple el umbral de **ESC-05** (100 % de conflictos resueltos, 0 transacciones perdidas, carga de 30 transacciones simultáneas).
+Por el modelo Offline-First (ADR-0001), una transacción nace en el dispositivo y se envía al Backend XALD más tarde. Dos dispositivos del mismo usuario pueden modificar la misma transacción antes de sincronizar, y el backend debe decidir cuál versión se conserva (ESC-05, RT-05). Esa decisión obliga a elegir tres cosas a la vez: quién genera la identidad de la transacción, qué dato sirve como "versión" y qué regla desempata.
 
 ## Opciones Evaluadas
 
-* **Resolución respaldada por base de datos** (tabla de historial de versiones en una BD persistente): descartada para este corte; el backend todavía no tiene persistencia de datos (ver deuda técnica en [Sección 11](../arc42/11-Risks%20and%20Technical%20Debts.md)), y el umbral de ESC-05 no exige historial persistente, solo resolución correcta en el momento de la petición.
-* **Vector clocks / CRDTs:** descartada; resuelven conflictos entre múltiples campos editados de forma independiente, un problema más general que el que tiene el proyecto (una sola marca de tiempo por transacción). Añadiría complejidad de implementación y de pruebas desproporcionada para el alcance del MVP.
-* **Last-Write-Wins con comparación de timestamp en memoria (Adoptada):** comparar `fecha_transaccion` de la petición entrante contra la última versión conocida, guardada en un diccionario en memoria (`ultima_version`), y conservar la más reciente.
+* **Identidad generada por el servidor + versión asignada por el servidor:** el servidor es la única fuente del orden, pero obliga a que el dispositivo espere una respuesta antes de tener un id, lo que rompe ESC-01 (registrar sin conexión).
+* **Vector clocks o CRDT:** resuelven conflictos sin depender de relojes, pero exigen guardar metadatos de versión por dispositivo y una lógica de fusión que excede RO-01 (equipo y tiempo de un semestre).
+* **UUID generado en el dispositivo + Last-Write-Wins por timestamp del cliente (Adoptada):** el dispositivo crea el id al registrar (`UUID.randomUUID()` en `GestorCoreFinanciero`) y el backend compara `fecha_transaccion`; gana la más reciente.
 
 ## Decisión Tomada
 
-Implementar la comparación LWW directamente en el handler `POST /api/v1/transacciones` de [`backend/app/main.py`](../../backend/app/main.py), usando el diccionario en memoria `ultima_version` indexado por `id_transaccion`. Cada vez que se detecta un conflicto (ya existía una versión previa), se incrementa el contador Prometheus `xald_sync_conflictos_resueltos_total`, ligado a ESC-05.
-
-## Justificación Técnica
-
-* **Cumplimiento verificado del umbral:** `test_medicion_esc05_30_transacciones_en_conflicto` en [`backend/tests/test_lww.py`](../../backend/tests/test_lww.py) reproduce la carga exacta de ESC-05 (30 transacciones en conflicto) y confirma 100 % resueltos y 0 perdidas. El mismo resultado (30/30) se verificó contra el backend real desplegado en Render con [`backend/scripts/medir_esc05.py`](../../backend/scripts/medir_esc05.py).
-* **Prueba dirigida al defecto:** `test_version_antigua_no_sobrescribe_a_la_reciente` verifica puntualmente que una versión antigua que llega después de la reciente no la sobrescriba; se confirmó que la prueba falla si se invierte la comparación de fechas (mutación documentada).
-* **Trazabilidad operacional:** cada conflicto resuelto queda reflejado en `GET /metrics`, dando evidencia en tiempo de ejecución además de la evidencia de prueba.
+1. El identificador de la transacción es un **UUID generado en el dispositivo** en el momento del registro y no cambia nunca (`id_transaccion`, `TransaccionDTO`).
+2. La **versión** de una transacción es su `fecha_transaccion` (ISO 8601, UTC), tomada del reloj del dispositivo.
+3. El backend conserva la versión con la fecha más reciente. Con fechas iguales conserva la que ya tenía (la comparación es estrictamente mayor, `main.py`).
+4. Reenviar una transacción ya recibida no crea un registro nuevo: la identidad es el UUID, así que el envío es idempotente.
 
 ## Consecuencias
 
-* **Positivas:** implementación simple, fácil de razonar y de testear; cumple el umbral medido de ESC-05.
-* **Riesgo:** el estado (`ultima_version`) vive solo en memoria y se reinicia con cada despliegue o cuando Render "duerme" el servicio en el plan Free — ya documentado como deuda técnica relacionada con el ADR-0001 en la Sección 11.
-* **Riesgo adicional:** la resolución depende de que la marca de tiempo enviada por el cliente sea confiable; no hay corrección de reloj. Este riesgo ya está registrado en el árbol de utilidad de la Sección 10 como el de mayor riesgo técnico del proyecto.
-* **Mitigación:** aceptada para este corte. La persistencia del estado de conflictos queda pendiente para una iteración futura, junto con la migración general a SQLite/Room mencionada en el aspecto A-02 de `aspectos.md`.
+### Positivas:
 
-## Trazabilidad
+* El dispositivo puede registrar y sincronizar sin esperar al servidor (ESC-01).
+* Reenviar el mismo payload es seguro, porque la idempotencia sale del propio UUID.
+* La regla cabe en pocas líneas y se verifica con `backend/tests/test_lww.py` y `backend/scripts/medir_esc05.py`.
 
-ESC-05 · RT-05 · OB-02 · [ADR-0001](0001-patron-offline-first.md) · [ADR-0010](0010-observabilidad.md)
+### Por qué es la decisión más costosa de revertir:
+
+Es la única decisión de datos que queda **escrita en cada dispositivo instalado**, no solo en el servidor. Las otras decisiones recientes se cambian redesplegando: el hosting (ADR-0008) se mueve a otro proveedor con el mismo `Dockerfile` y las métricas (ADR-0010) se reemplazan sin tocar los datos. Esta no.
+
+Costo de reversión, si algún día se cambia a versiones asignadas por el servidor o a vector clocks:
+
+* **Esquema local:** cada APK instalado tiene transacciones con UUID y fecha del cliente. Cambiar la noción de versión exige una migración de la base de datos de cada dispositivo.
+* **Distribución:** la app se instala como APK directo, sin tienda (ADR-0009), así que no se puede forzar la actualización. Durante un tiempo convivirían dispositivos con la regla vieja y la nueva contra el mismo backend.
+* **Contrato público:** cambia `TransaccionDTO` y `docs/api/openapi.yaml`, y con ellos el cliente de `:syncqueue` y el payload de `:corefinanciero`.
+* **Historia irrecuperable:** las versiones que LWW descartó no se guardan, así que no se pueden reconstruir con otra regla.
+* **Verificación:** hay que reescribir ESC-05, `test_lww.py`, `medir_esc05.py` y la métrica `xald_sync_conflictos_resueltos_total`.
+
+### Riesgos y Mitigación:
+
+* **Riesgo:** LWW depende de que el reloj del dispositivo sea confiable. Un reloj adelantado hace que su versión gane siempre. Este es el riesgo de mayor probabilidad de ESC-05 (Sección 11).
+* **Mitigación:** ninguna formalizada. Queda declarado como deuda: una opción futura es que el backend registre su propia hora de recepción y rechace fechas muy por delante de ella.
+* **Riesgo:** el estado de versiones (`ultima_version` en `main.py`) vive en memoria y se pierde en cada despliegue o cuando Render duerme el servicio (ADR-0008).
+* **Mitigación:** pendiente la persistencia remota. Mientras tanto la garantía vale solo dentro de un mismo periodo de vida del proceso.
+
+## Puntos Abiertos
+
+* Persistencia remota del estado de versiones (clave única por `id_transaccion`).
+* Política ante relojes desfasados.
+
+**Trazabilidad:**
+* Implementación: [`backend/app/main.py`](../../backend/app/main.py), [`GestorCoreFinanciero.kt`](../../XALDAPP/corefinanciero/src/main/java/com/proyecto/xald/corefinanciero/GestorCoreFinanciero.kt)
+* Pruebas: [`backend/tests/test_lww.py`](../../backend/tests/test_lww.py), [`backend/scripts/medir_esc05.py`](../../backend/scripts/medir_esc05.py)
+* Decisiones relacionadas: [ADR-0001](0001-patron-offline-first.md), [ADR-0008](0008-plataforma-de-despliegue.md), [ADR-0009](0009-distribucion-app.md)
+* Restricción y escenario: RT-05, ESC-05 ([arc42 §2](../arc42/02-Architecture%20constraints.md), [arc42 §10](../arc42/10-Quality%20Requirements.md))
