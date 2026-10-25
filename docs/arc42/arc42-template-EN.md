@@ -1,231 +1,217 @@
-# Deployment View
+# Architecture Decisions
 
-Esta sección muestra dónde corre físicamente cada pieza del sistema XALD y qué costo mensual implica mantenerlas en línea, complementando la vista lógica de la Sección 5 (Building Block View) con la infraestructura real sobre la que se despliega cada contenedor.
+Las decisiones arquitectónicas del proyecto se registran como ADR (Architecture Decision Record) individuales en `docs/adr/`, siguiendo la convención de nombre `NNNN-titulo-en-kebab-case.md`. Cada decisión responde a un objetivo de negocio o de calidad de la Sección 1, y varias se verifican mediante los escenarios de calidad de la Sección 10.
 
-## 7.1 Infraestructura de Despliegue
+| ID | Título | Decisión | Relacionado con |
+| --- | --- | --- | --- |
+| [ADR-0001](../adr/0001-patron-offline-first.md) | Adopción de Patrón de Arquitectura Offline-First | Persistencia primero en base de datos local cifrada (SQLite/Room); los datos se envían al backend de forma asíncrona mediante una cola de sincronización cuando hay red. | Objetivo de calidad 1 (Disponibilidad) · RT-02 · ESC-01 |
+| [ADR-0002](../adr/0002-parsing-hibrido.md) | Estrategia de Parsing Híbrido (Regex + librerías open source) | Usar un receptor de eventos local (RECEIVE_SMS) con un motor de expresiones regulares, en vez de una API bancaria oficial o un modelo de IA completo. | Objetivo de calidad 5 (Modificabilidad) · RT-04 · RO-02 · ESC-03 |
+| [ADR-0003](../adr/0003-restriccion-os.md) | Restricción de Plataforma a Android y Exclusión de iOS | Limitar el cliente exclusivamente al ecosistema Android, usando BroadcastReceiver con el permiso RECEIVE_SMS. | Objetivo de negocio OB-01 · RT-01 |
+| [ADR-0004](../adr/0004-seguridad-y-cifrado.md) | Modelo de Seguridad Acotado y Cifrado de Datos | Enfocar la seguridad en dos capas: cifrado local en reposo (AES-256 vía Android Keystore) y cifrado en tránsito (HTTPS/TLS). | Objetivo de calidad 3 (Seguridad básica) · RT-03 · RL-01 · ESC-04 |
+| [ADR-0005](../adr/0005-reduccion-de-funcionalidades.md) | Alcance Reducido en el Módulo de Analítica y Reportes (MVP) | Reducir el módulo de reportes a lo esencial (saldos consolidados, gráficos básicos, lista de movimientos), dejando fuera el motor avanzado de analítica y predicción. | RO-01 |
+| [ADR-0006](../adr/0006-seleccion-de-estilo-arquitectonico.md) | Selección de Estilo Arquitectónico — Monolito Modular | Adoptar un monolito modular organizado por paquetes de dominio (`parser`, `corefinanciero`, `syncqueue`, `aigemini`), en vez de arquitectura por capas o hexagonal. | RO-01 · Objetivo de calidad 5 (Modificabilidad) |
+| [ADR-0007](../adr/0007-contratos-por-modulo.md) | Contratos Públicos por Módulo y Orquestación Centralizada | Cada módulo expone una única interfaz pública (`internal` en Kotlin); toda la coordinación entre contextos ocurre en `:app` mediante `ProcesarNotificacionUseCase`. | Auditoría de violaciones semana 6 (V-01 a V-07) |
+| [ADR-0008](../adr/0008-plataforma-de-despliegue.md) | Selección de Plataforma de Despliegue para el Backend XALD | Desplegar el Backend XALD como Web Service Docker en el plan Free de Render, definido como código en `render.yaml`, sin tarjeta de crédito. | RO-02 · RO-03 · Sección 7 (Deployment View) |
+| [ADR-0009](../adr/0009-distribucion-app.md) | Distribución de la Aplicación Móvil como APK Directo | Distribuir el APK generado por Gradle directamente vía GitHub Releases (sideloading), sin publicar en Google Play en este corte. | RO-01 · RO-02 · RO-03 · RT-01 |
+| [ADR-0010](../adr/0010-observabilidad.md) | Observabilidad con Logs JSON y Métricas Prometheus Embebidas | Exponer logs estructurados en JSON (stdout) y un endpoint `/metrics` en formato Prometheus dentro del propio backend, sin plataforma de monitoreo externa. | RO-02 · RO-03 · ESC-05 |
+| [ADR-0011](../adr/0011-resolucion-conflictos-lww.md) | Implementación de Resolución de Conflictos Last-Write-Wins (LWW) | El backend conserva la última versión por `id_transaccion` y resuelve los conflictos por fecha de transacción; los reenvíos idénticos se tratan de forma idempotente (§8.5). | RT-05 · ESC-05 · MF-03 |
+| [ADR-0012](../adr/0012-aplazamiento-integracion-gemini.md) | Aplazamiento de la Integración Real con la API de Gemini | Mantener `CategorizadorGemini` como *mock* detrás del contrato `ServicioCategorizacion` hasta definir cómo se protege la llave. | ESC-02 · MF-04 a MF-06 |
+| [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md) | Extraer o no extraer la integración con Gemini como servicio independiente | **No extraer** en este corte: `:aigemini` sigue en el monolito modular; se evaluaron explícitamente "no extraer" y "extraer al backend", con disparadores para reevaluar. | ADR-0006 · ADR-0007 · ESC-02 · Sección 11 |
 
-XALD se despliega sobre tres piezas de infraestructura independientes, una por cada contenedor o sistema externo identificado en el C1 y el C2:
+# Quality Requirements
 
-```mermaid
-flowchart LR
-    subgraph DISP["Dispositivo Android del usuario"]
-        ANDROID["Aplicación Móvil XALD<br/>APK instalado localmente<br/>Offline-First"]
-    end
-    subgraph RND["Render · plan Free · región Oregon"]
-        RENDER["Backend XALD<br/>Contenedor Docker<br/>FastAPI + Uvicorn<br/>/health · /metrics"]
-    end
-    subgraph GCP["Google Cloud · SaaS externo"]
-        GEMINI["Google Gemini API<br/>Free Tier (AI Studio)"]
-    end
-    ANDROID -->|"HTTPS · POST /api/v1/transacciones<br/>Header X-API-Key"| RENDER
-    ANDROID -->|"HTTPS · categorización de comercio"| GEMINI
+Esta sección desarrolla los 5 objetivos de calidad definidos en la Sección 1 (Disponibilidad, Resiliencia, Seguridad básica, Consistencia eventual y Modificabilidad). Primero se muestra el árbol de utilidad, que los prioriza según su impacto en el negocio y su riesgo técnico, y después los 5 escenarios de calidad (ESC-01 a ESC-05) que los hacen medibles, cada uno enlazado a su objetivo de negocio y a la restricción arquitectónica que lo origina.
+
+## Quality Scenarios
+
+Cada escenario sigue las seis partes que exige arc42: fuente, estímulo, artefacto, entorno, respuesta y medida de respuesta. Cada medida declara explícitamente su umbral, la carga bajo la cual se evalúa y la herramienta de verificación.
+
+### ESC-01 · Registro de transacción sin conexión
+
+| Parte | Contenido |
+|---|---|
+| **Fuente** | Entidad bancaria (mensaje SMS) |
+| **Estímulo** | Llega una notificación de transacción al dispositivo |
+| **Artefacto** | Ingestion Module y Data & Sync Module |
+| **Entorno** | Operación normal, dispositivo en modo avión (sin conexión) |
+| **Respuesta** | El sistema extrae los datos, registra la transacción en el almacenamiento local cifrado y la marca como pendiente de sincronizar |
+| **Medida** | **Umbral:** ≤ 2 s desde la recepción del SMS hasta la persistencia confirmada · **Carga:** 20 SMS consecutivos con 1 s de separación · **Herramienta:** prueba instrumentada con `adb shell am broadcast` y medición por *timestamp* en el log |
+
+**Objetivo de calidad:** 1 (Disponibilidad) · **Objetivo de negocio:** OB-02 · **Restricción:** RT-02
+
+### ESC-02 · Indisponibilidad del servicio de categorización
+
+| Parte | Contenido |
+|---|---|
+| **Fuente** | Google Gemini API (servicio externo de categorización) |
+| **Estímulo** | La petición falla o excede el tiempo de espera |
+| **Artefacto** | Processing & Parser Module (Gemini API Client) |
+| **Entorno** | Con conexión disponible, servicio externo degradado o caído |
+| **Respuesta** | La transacción ya registrada se conserva, se marca como "Sin Categorizar" y se reclasifica automáticamente cuando el servicio vuelve a responder |
+| **Medida** | **Umbral:** 0 transacciones perdidas; corte a los 5 s; máximo 3 reintentos con espera creciente · **Carga:** 50 transacciones con el servicio simulado como no disponible · **Herramienta:** servidor simulado (*mock*) que devuelve error 503, verificación por conteo en base de datos |
+
+**Objetivo de calidad:** 2 (Resiliencia) · **Objetivo de negocio:** OB-01 · **Restricción:** RO-02
+
+### ESC-03 · Incorporación de una nueva entidad bancaria
+
+| Parte | Contenido |
+|---|---|
+| **Fuente** | Equipo de desarrollo |
+| **Estímulo** | Una entidad bancaria cambia el formato de sus mensajes o se requiere soportar una entidad no contemplada |
+| **Artefacto** | Processing & Parser Module (Regex Engine) |
+| **Entorno** | Tiempo de desarrollo |
+| **Respuesta** | Se agrega una regla de lectura nueva sin modificar el código de las entidades ya soportadas |
+| **Medida** | **Umbral:** 1 archivo nuevo y 0 modificaciones fuera del registro de reglas; esfuerzo ≤ 4 h · **Carga:** incorporación de una entidad real no soportada · **Herramienta:** `git diff --stat` sobre el *commit* de la incorporación |
+
+**Objetivo de calidad:** 5 (Modificabilidad) · **Objetivo de negocio:** OB-04 · **Restricción:** RT-04
+
+### ESC-04 · Protección de la información almacenada
+
+| Parte | Contenido |
+|---|---|
+| **Fuente** | Atacante con acceso físico al dispositivo |
+| **Estímulo** | Intento de lectura directa del archivo de base de datos |
+| **Artefacto** | Data & Sync Module (SQLite/Room con AES-256) |
+| **Entorno** | Dispositivo perdido, robado o comprometido |
+| **Respuesta** | El contenido resulta ilegible sin la clave, resguardada en el Android Keystore |
+| **Medida** | **Umbral:** 0 campos financieros legibles en texto plano · **Carga:** base de datos con 500 transacciones · **Herramienta:** extracción del archivo con `adb pull` e inspección con `strings` y `sqlite3` |
+
+**Objetivo de calidad:** 3 (Seguridad básica) · **Objetivo de negocio:** OB-03 · **Restricciones:** RT-03 y RL-01
+
+### ESC-05 · Resolución de conflictos al sincronizar
+
+| Parte | Contenido |
+|---|---|
+| **Fuente** | Usuario con la aplicación en más de un dispositivo |
+| **Estímulo** | La misma transacción se modifica en dos dispositivos mientras ambos están sin conexión |
+| **Artefacto** | Data & Sync Module (Sync Queue) y Backend XALD (motor LWW) |
+| **Entorno** | Restablecimiento de la conexión en ambos dispositivos |
+| **Respuesta** | Se aplica la política Last-Write-Wins tomando la marca de tiempo más reciente, sin duplicar ni sobrescribir saldos |
+| **Medida** | **Umbral:** 100 % de conflictos resueltos automáticamente, 0 transacciones distintas perdidas · **Carga:** 30 transacciones en conflicto simultáneo · **Herramienta:** dos emuladores con relojes sincronizados, verificación por comparación de estado final contra el esperado |
+
+**Objetivo de calidad:** 4 (Consistencia eventual) · **Objetivo de negocio:** OB-02 · **Restricción:** RT-05
+
+## Árbol de utilidad
+
+Notación: **(Impacto en el negocio, Riesgo técnico)** en escala Alto / Medio / Bajo.
+
+```
+Utilidad del sistema XALD
+│
+├── DISPONIBILIDAD
+│   └── ESC-01 · Registro sin conexión ......................... (A, A)
+│         Propuesta de valor central; su fallo invalida el producto.
+│
+├── RESILIENCIA
+│   └── ESC-02 · Fallo del servicio de categorización .......... (A, M)
+│         Perder una transacción rompe la confianza;
+│         la mitigación es conocida y de bajo costo.
+│
+├── SEGURIDAD
+│   └── ESC-04 · Protección de datos almacenados ............... (A, M)
+│         Obligación legal (RL-01); el riesgo baja al usar
+│         mecanismos estándar de la plataforma.
+│
+├── CONSISTENCIA EVENTUAL
+│   └── ESC-05 · Conflictos al sincronizar ..................... (M, A)
+│         Riesgo alto por la complejidad; impacto medio
+│         porque solo afecta a usuarios multidispositivo.
+│
+└── MODIFICABILIDAD
+    └── ESC-03 · Nueva entidad bancaria ........................ (M, M)
+          Afecta la cobertura, no la operación.
 ```
 
-| Pieza | Dónde corre | Cómo se despliega | Notas |
-| :--- | :--- | :--- | :--- |
-| **Aplicación Móvil XALD** (`:app`, `:parser`, `:corefinanciero`, `:syncqueue`, `:aigemini`) | Dispositivo Android del usuario | APK distribuido por GitHub Releases e instalado localmente ([ADR-0009](../adr/0009-distribucion-app.md)) | No requiere servidor: guarda primero en el dispositivo (Offline-First, RT-02). |
-| **Backend XALD** | [Render](https://render.com), *Web Service* tipo Docker, plan **Free**, región **Oregon** | Definido como código en [`render.yaml`](../../render.yaml); imagen construida desde [`backend/Dockerfile`](../../backend/Dockerfile); desplegado por el job `deploy-backend` del CI mediante el secreto `RENDER_DEPLOY_HOOK` ([ADR-0008](../adr/0008-plataforma-de-despliegue.md)) | URL pública: `https://xald-backend.onrender.com`. Health check en `/health`, métricas en `/metrics` ([ADR-0010](../adr/0010-observabilidad.md)). `XALD_API_KEY` vive en Render → Environment, nunca en el repositorio. |
-| **Google Gemini API** | Infraestructura de Google Cloud (SaaS, fuera de la frontera del sistema) | Consumida vía HTTPS desde `:aigemini` (`CategorizadorGemini`) con una llave de Google AI Studio, capa gratuita | Solo se envían el nombre del comercio y el monto (RL-01); si falla, aplica el flujo de reintentos de ESC-02. |
+**Prioridad de atención:** ESC-01 → ESC-02 → ESC-04 → ESC-05 → ESC-03
 
-**Aspectos notables:** ninguna de las tres piezas requiere infraestructura administrada por el equipo, consecuencia directa de RO-01, RO-02 y RO-03.
+Los escenarios calificados **(A, A)** y **(A, M)** son los que condicionan las decisiones arquitectónicas registradas en los ADR.
 
-**Estado actual:** el Backend XALD está desplegado y en línea. Las dos flechas que salen del dispositivo representan el diseño: la app todavía no llama al backend ni a Gemini (`CategorizadorGemini` es un *stub* local), por lo que esas conexiones se activan cuando se implementen los clientes HTTP de `:syncqueue` y `:aigemini`.
+# Risks and Technical Debts
 
-## 7.2 Costo Mensual
+Esta sección consolida los riesgos y deudas técnicas que ya quedaron documentados individualmente en cada ADR (Sección 9) y en la Sección 6, junto con los modos de fallo de las integraciones identificados en la semana 11.
 
-Estimación de costo bajo el supuesto de volumen indicado, con las tarifas vigentes en las fuentes citadas (consultadas el 27 de septiembre de 2026).
+| Riesgo / Deuda técnica | Origen | Mitigación actual |
+| --- | --- | --- |
+| Complejidad adicional por el motor de resolución de conflictos (LWW), validación redundante y manejo de colas de sincronización | ADR-0001 | Asumida como costo necesario del enfoque Offline-First; se verifica con ESC-05 |
+| Vulnerabilidad ante *phishing* (SMS falsos procesados como compras reales) y mensajes que Regex no logra leer | ADR-0002 | Ninguna formalizada todavía — pendiente de definir cómo se detecta un SMS fraudulento |
+| Necesidad de mantenimiento continuo si un banco cambia el formato de sus mensajes | ADR-0002 | Mitigado en parte por el registro de reglas modular (ver ESC-03); sigue siendo trabajo manual del equipo |
+| Incompatibilidad absoluta con dispositivos iOS | ADR-0003 | Aceptada como restricción permanente del alcance (RT-01), no hay mitigación planeada |
+| El sistema no soporta ataques avanzados a gran escala ni alta concurrencia masiva | ADR-0004 | Aceptada porque el alcance actual es solo grupos reducidos de prueba |
+| Menor profundidad en el análisis financiero avanzado para el usuario final | ADR-0005 | Aceptada como parte del recorte a MVP; podría revisarse en una futura iteración |
+| Riesgo de acoplamiento indeseado entre paquetes por importación directa de clases | ADR-0006 | Mitigado con el modificador `internal` de Kotlin para los componentes que no son parte de la interfaz pública del módulo |
+| La reclasificación automática de transacciones "Sin Categorizar" (mencionada en ESC-02) depende de un componente que **todavía no está implementado** en el código | Sección 6 — Runtime View | Sin mitigación todavía; ver plan P-05 |
+| La resolución de conflictos entre dispositivos (ESC-05) depende de que los relojes de los dispositivos sean razonablemente confiables | Árbol de utilidad — Sección 10 | Ninguna formalizada; es el escenario de mayor riesgo técnico del proyecto (Riesgo: Alta) |
+| La integración con Gemini es un *mock* (`CategorizadorGemini.kt`): no hay llamada real, timeout ni reintentos, y la categorización no usa IA | ADR-0012 | Aplazada de forma explícita; el contrato `ServicioCategorizacion` aísla el punto de reemplazo. Ver MF-04 a MF-06 y plan P-03 |
+| La cola de sincronización guarda en memoria y no tiene cliente HTTP, por lo que aún no envía transacciones al backend | `EVIDENCIA-S9.md` (H-3), `aspectos.md` (A-03) | Sin mitigación todavía. Ver MF-01, MF-02 y plan P-01 |
+| El backend guarda `ultima_version` solo en memoria: se pierde al reiniciar o cuando Render Free duerme el servicio | ADR-0011 | Aceptada para este corte; persistencia pendiente (A-02). Ver plan P-04 |
+| El payload de Android (`PayloadSincronizacionDTO`) no incluye `moneda`, `categoria` ni `origen_datos`, que el backend exige en `TransaccionDTO`: la primera sincronización real respondería 422 | `aspectos.md` (A-03) | Sin mitigación todavía; se alinea el contrato dentro del plan P-01 |
+| La llave de Gemini no tiene mecanismo de gestión definido | ADR-0012, ADR-0013 | Integración real aplazada; si la llave no puede protegerse en el cliente se dispara la reevaluación del [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md) |
 
-**Volumen supuesto:** 50 usuarios activos, cada uno generando en promedio 5 transacciones al día → **~7 500 transacciones al mes**, cada una sincronizada con el backend, y un número similar de posibles consultas a Gemini en el peor caso (todos los comercios ambiguos, ESC-01 Caso B), es decir **~250 consultas al día**.
+## 11.1 Modos de fallo de las integraciones
 
-| Pieza | Capa usada | Límite de la capa gratuita | Costo con el volumen supuesto | Fuente (fecha de consulta) |
-| :--- | :--- | :--- | :--- | :--- |
-| **Render** (Backend, Web Service Docker) | Free | 750 h/mes de instancia, 512 MB RAM, 0.1 CPU; se duerme tras 15 min sin tráfico | **$0/mes** — 7 500 peticiones al mes son un tráfico muy bajo para una instancia | [render.com/pricing](https://render.com/pricing) (27 sep 2026) |
-| **Google Gemini API** (`:aigemini`) | Free Tier (Google AI Studio) | Del orden de cientos a ~1 500 solicitudes al día según el modelo Flash usado | **$0/mes** — ~250 solicitudes al día, dentro de la cuota de los modelos con mayor límite (ver punto de ruptura) | [ai.google.dev/gemini-api/docs/pricing](https://ai.google.dev/gemini-api/docs/pricing) y [ai.google.dev/gemini-api/docs/rate-limits](https://ai.google.dev/gemini-api/docs/rate-limits) (27 sep 2026) |
-| **Aplicación Android** | GitHub Releases | Gratuito para repositorios públicos | **$0/mes** | — |
-| **Total estimado** | | | **$0/mes** | |
+Cada integración entre componentes que cruza la red puede fallar de tres maneras: no responde, responde tarde o responde dos veces. La tabla asigna una mitigación a cada modo y declara en qué estado está en el código, para no presentar como implementado lo que solo está diseñado.
 
-**Punto de ruptura (cuándo deja de ser gratis):**
+| ID | Integración | Modo de fallo | Qué ocurre | Mitigación asignada | Estado en el código | Prueba |
+|---|---|---|---|---|---|---|
+| **MF-01** | `:syncqueue` → Backend (`POST /api/v1/transacciones`, conector 4) | No responde | El backend está caído, no hay red o Render Free lo tiene dormido; el payload no llega. | La transacción ya se guarda en `:corefinanciero` antes de encolarse (pasos 3 y 4 de `ProcesarNotificacionUseCase`), así que el fallo no la pierde. La cola la conserva y la reenvía al volver la conexión, con reintentos de espera creciente. | **Pendiente (P-01).** La app aún no tiene cliente HTTP, y la cola (`ColaSincronizacion`) y el core guardan hoy en memoria (`mutableListOf`). | Sin prueba |
+| **MF-02** | `:syncqueue` → Backend | Responde tarde | El *cold start* de Render Free (duerme tras 15 min sin tráfico) o un backend lento hace esperar al cliente, que podría rendirse y reintentar mientras el primer intento sigue en curso. | Timeout holgado en el cliente, que cubra el cold start, y una petición de calentamiento a `GET /health` antes de sincronizar. Si el cliente se rinde y reintenta, el reenvío lo absorbe la idempotencia de MF-03. La latencia queda visible en los logs (`duracion_ms`). | **Parcial (P-01).** El timeout y el calentamiento están en `backend/scripts/medir_esc05.py` (`timeout=120` y `GET /health`), y `duracion_ms` en el middleware de `backend/app/main.py`. En el cliente de la app: pendiente. | Sin prueba automatizada; `medir_esc05.py` lo ejercita contra Render |
+| **MF-03** | `:syncqueue` → Backend | Responde dos veces | El mismo payload llega dos veces: el cliente reintentó tras perder la respuesta, o la cola reenvía un elemento que no se marcó como enviado (`obtenerSiguienteParaSincronizar()` no lo retira). | Idempotencia por `id_transaccion` (UUID), diseñada en [§8.5](08-Cross-cutting%20Concepts.md). Un reenvío idéntico responde 202 sin cambiar el estado y se cuenta en `xald_sync_duplicados_total`; un conflicto real se resuelve con Last-Write-Wins ([ADR-0011](../adr/0011-resolucion-conflictos-lww.md)). | **Implementada en el backend** (`registrar_transaccion` en `main.py`, contador `xald_sync_duplicados_total`). Límites declarados: el estado vive en memoria y se reinicia con cada despliegue o cuando Render duerme el servicio (P-04); la cola aún no retira lo ya confirmado (P-02). | `test_mf03_reenvio_identico_es_idempotente_y_no_cuenta_como_conflicto` y `test_mf03_conflicto_real_sigue_contando_como_conflicto` en `backend/tests/test_lww.py`; 30/30 en `medir_esc05.py` |
+| **MF-04** | `:aigemini` → Gemini API (conector 2) | No responde | Gemini está caído o no hay conexión; no hay categoría. | Timeout de 5 s y reintentos con espera creciente (~2 s, ~4 s) según la [Sección 6.2](06-Runtime%20view.md). Si se agotan, la transacción se guarda como «Sin Categorizar» (ESC-02). | **Pendiente declarada (P-03).** `CategorizadorGemini` es un *mock* sin llamada de red ([ADR-0012](../adr/0012-aplazamiento-integracion-gemini.md)). `ProcesarNotificacionUseCase` no captura fallos de `categorizar()` ni asigna «Sin Categorizar». | Sin prueba |
+| **MF-05** | `:aigemini` → Gemini API | Responde tarde | Gemini responde después de los 5 s. | El corte de 5 s descarta la respuesta tardía y la cuenta como intento fallido. Si se agotan los intentos se aplica «Sin Categorizar», y la reclasificación posterior retoma la categoría. | **Pendiente declarada (P-03, P-05).** Mismo motivo que MF-04. Además, la reclasificación automática no existe como componente (Sección 6.2). | Sin prueba |
+| **MF-06** | `:aigemini` → Gemini API | Responde dos veces | Un reintento tras un timeout puede traer dos respuestas para el mismo comercio: la tardía del primer intento y la del segundo. | La llamada solo consulta (sin efecto secundario externo) y la categorización es idempotente: se conserva la primera respuesta aceptada y se ignora la siguiente. | **Pendiente declarada (P-03).** No hay integración real todavía; la regla debe implementarse junto con el cliente real. | Sin prueba |
 
-- **Render:** un servicio encendido todo el mes consume ~730 h, así que las 750 h gratuitas alcanzan para **una sola instancia**. La capa se rompe al agregar un segundo servicio o una segunda instancia para escalar, o cuando el tráfico exija más de 512 MB de RAM. El siguiente escalón es el plan **Starter** (~USD $7/mes).
-- **Gemini API:** se rompe cuando las consultas diarias superan el límite del modelo gratuito. Con 5 transacciones por usuario al día, todas ambiguas, el punto de ruptura es **límite diario ÷ 5 usuarios**: con un modelo de ~1 500 solicitudes al día, unos **300 usuarios**; con un modelo de cuota menor, el supuesto de 50 usuarios puede quedar cerca del límite. A partir de ahí hay que habilitar facturación, que se cobra por token.
-- Con el supuesto de 50 usuarios, Render queda lejos de su límite. Gemini es la pieza más sensible, y por eso la categorización es no bloqueante: si se agota la cuota, la transacción se guarda como *Sin Categorizar* (ESC-02) y no se pierde ningún registro.
+## 11.2 Correspondencia entre mitigaciones declaradas e implementadas
 
-> **Nota de trazabilidad:** `CategorizadorGemini` (`XALDAPP/aigemini/src/main/java/CategorizadorGemini.kt`) es un *stub* local que todavía no hace llamadas reales a Gemini. El costo de esa pieza es una proyección, no un gasto ya incurrido.
+*Fecha de contraste con el código: octubre 2026 (semana 11).*
 
-# Cross-cutting Concepts
-## 8.1 Context Map (Mapa de Contextos)
-Cada módulo del proyecto representa un **Bounded Context** (Contexto Delimitado) con responsabilidades claras y un vocabulario propio, evitando la filtración de lógica o datos hacia otros dominios.
-
-| Módulo | Contexto | Responsabilidad |
-| :--- | :--- | :--- |
-| **`:app`** | Presentación | Interfaz gráfica (Jetpack Compose), orquesta las llamadas a los demás módulos y muestra saldo/reportes al usuario. |
-| **`:parser`** | Ingesta | Recibe el SMS crudo del sistema operativo y lo interpreta mediante el Motor de Parseo (Regex). |
-| **`:aigemini`** | Categorización | Traduce las respuestas de la API externa de Gemini al formato de dominio propio mediante una Capa Anticorrupción (ACL). |
-| **`:corefinanciero`** | Núcleo Financiero | Dueño único de la transacción persistida; expone su interfaz pública para que otros módulos consulten sin tocar la base de datos. |
-| **`:syncqueue`** | Sincronización | Gestiona la cola de transacciones pendientes y coordina el envío de lotes hacia el Backend XALD. |
-| **Backend XALD** | Externo | Servicio fuera de los módulos Gradle móviles. Recibe los lotes de `:syncqueue` vía REST/HTTPS. |
-
----
-
-## 8.2 Diccionario de Lenguaje Ubicuo
-
-| Término (ES) | Módulo (Contexto) | Tipo | Significado |
-| :--- | :--- | :--- | :--- |
-| `TransaccionProcesadaDTO` | `:parser` | Dato en memoria (DTO) | Objeto temporal que representa una transacción interpretada por el Motor de Parseo antes de ser persistida. Sin identidad de base de datos. |
-| `ParseoSms` | `:parser` | Componente (Regex) | Componente interno que aplica expresiones regulares al SMS crudo del sistema operativo para extraer datos financieros. |
-| `CategorizadorGemini` | `:aigemini` | Traductor (ACL) | Capa Anticorrupción que adapta la respuesta de la API externa de Gemini al dominio local, aislando el sistema de cambios externos. |
-| `TransaccionEntidad` | `:corefinanciero` | Entidad persistida (BD) | Representación permanente de la transacción en SQLite/Room. Fuente primaria de verdad (*Offline-First*) cifrada con AES-256. |
-| `InformacionFinanciera` | `:corefinanciero` | Interfaz pública | Contrato que expone el Núcleo Financiero a otros módulos (`:app`, `:syncqueue`) para consultar datos de forma segura. |
-| `PayloadSincronizacionDTO` | `:corefinanciero` $\rightarrow$ `:syncqueue` | Dato en tránsito (DTO) | Objeto de solo lectura empaquetado por el núcleo financiero. Sirve de contrato seguro para enviar datos al Backend sin exponer la tabla original. |
-| `ColaSincronizacion` | `:syncqueue` | Gestor (Cola) | Componente que administra las transacciones pendientes de envío al Backend XALD, asegurando resistencia a desconexiones y tránsito seguro vía TLS 1.3. |
-| `ServicioParser` | `:parser` | Interfaz pública | Contrato que expone el contexto de Ingesta. Recibe el texto crudo del SMS y devuelve un `TransaccionProcesadaDTO`, manteniendo oculta la implementación `ParseoSms` mediante el modificador `internal`. |
-| `ServicioCategorizacion` | `:aigemini` | Interfaz pública | Contrato que expone el contexto de Categorización. Recibe el nombre del comercio y devuelve un `CategoriaResultado`, sin permitir que tipos propios de la API externa crucen la frontera del módulo. |
-| `CategoriaResultado` | `:aigemini` | Dato en memoria (DTO) | Resultado ya traducido por la Capa Anticorrupción. Contiene el nombre de la categoría y el nivel de confianza expresados en el vocabulario del dominio propio, no en el del proveedor externo. |
-| `GestorCoreFinanciero` | `:corefinanciero` | Componente (Persistencia) | Implementación interna del Núcleo Financiero. Genera el identificador único de cada transacción, convierte los datos recibidos en `TransaccionEntidad` y empaqueta los pendientes como `PayloadSincronizacionDTO`. |
-| `ColaSincronizacionService` | `:syncqueue` | Interfaz pública | Contrato que expone el contexto de Sincronización. Permite encolar un `PayloadSincronizacionDTO` y consultar los pendientes, manteniendo oculta la implementación `ColaSincronizacion`. |
-| `ProcesarNotificacionUseCase` | `:app` | Orquestador (Caso de uso) | Componente de la capa de aplicación que coordina el ciclo completo de una transacción invocando únicamente los contratos públicos de los cuatro contextos de dominio, sin conocer sus implementaciones internas. |
-
----
-
-## 8.3 Tipos de Relación entre Contextos (DDD)
-
-| Origen | Destino | Tipo de Relación (DDD) | Justificación Teleológica |
-| :--- | :--- | :--- | :--- |
-| `:parser` | `:corefinanciero` | **Customer-Supplier** | `:parser` entrega `TransaccionProcesadaDTO` y `:corefinanciero` lo transforma a `TransaccionEntidad` antes de guardar. Hay mapeo directo entre dominios. |
-| `:aigemini` | Gemini API (Externo) | **Anti-Corruption Layer (ACL)** | `CategorizadorGemini` aísla el modelo de dominio interno de las variaciones y tipos crudos de la API externa. |
-| `:corefinanciero` | `:app` | **Customer-Supplier** | `:app` consume los servicios financieros mediante la interfaz pública `InformacionFinanciera`, respetando el contrato expuesto por el proveedor. |
-| `:corefinanciero` | `:syncqueue` | **Customer-Supplier** | `:corefinanciero` despacha un `PayloadSincronizacionDTO` de solo lectura a `:syncqueue` a través de su interfaz pública, evitando accesos directos a la base de datos. |
-| `:syncqueue` | Backend XALD (Externo) | **Customer-Supplier** | `:syncqueue` entrega lotes formateados al Backend mediante REST/HTTPS; el servidor actúa como el proveedor remoto del estado consolidado. |
-
----
-
-## 8.4 Enlace a Atributos de Calidad (`docs/aspectos.md`)
-* **Offline-First (A-01):** `TransaccionEntidad` es la fuente primaria de verdad local. `ColaSincronizacion` retiene los cambios locales mientras no exista conectividad a internet.
-* **Cifrado AES-256:** Cifra la persistencia en reposo de `TransaccionEntidad` dentro del contenedor del módulo `:corefinanciero`.
-* **Cifrado TLS 1.3:** Protege la comunicación en tránsito en dos fronteras externas: desde `CategorizadorGemini` hacia la API de Gemini, y desde `ColaSincronizacion` hacia el Backend XALD.
-
-Los almacenes de datos donde viven estas garantías están dibujados como contenedores propios en el C2 (`docs/c4/c2.md`, sección *Almacenes de datos y brokers*).
-
----
-
-## 8.5 Diseño de idempotencia en la sincronización
-
-### Problema
-
-La cola de sincronización entrega las transacciones con la garantía de "al menos una vez": si el dispositivo no recibe la respuesta del backend (se corta la red o expira el tiempo), reenvía la misma transacción. Por eso el backend puede recibir la misma transacción dos veces, y ese reenvío no debe producir un segundo registro ni alterar saldos.
-
-### Diseño
-
-**Clave de idempotencia.** `id_transaccion` (UUID generado en el dispositivo, definido en `backend/app/dtos.py`) identifica de forma única cada transacción. El cliente la conserva en la cola hasta recibir una respuesta 2xx.
-
-**Comportamiento del receptor** (`POST /api/v1/transacciones`):
-
-| Caso | Condición | Respuesta | Efecto |
-|---|---|---|---|
-| Primera recepción | `id_transaccion` no existe | 202 `ACEPTADO` | Se guarda la versión. |
-| Reenvío idéntico | mismo `id_transaccion` y misma `fecha_transaccion` | 202 `ACEPTADO` (misma respuesta) | Sin cambios. Se cuenta como duplicado, no como conflicto. |
-| Conflicto real | mismo `id_transaccion`, distinta `fecha_transaccion` | 202 `ACEPTADO` | Se aplica Last-Write-Wins ([ADR-0011](../adr/0011-resolucion-conflictos-lww.md)) y se cuenta como conflicto resuelto. |
-
-Con entrega "al menos una vez" y un receptor idempotente, el efecto neto es el de "exactamente una vez".
-
-**Implementación.** `registrar_transaccion` en `backend/app/main.py` separa los dos casos: un reenvío idéntico responde 202 sin modificar `ultima_version` e incrementa `xald_sync_duplicados_total`; solo un conflicto real incrementa `xald_sync_conflictos_resueltos_total`. Lo verifican `test_mf03_reenvio_identico_es_idempotente_y_no_cuenta_como_conflicto` y `test_mf03_conflicto_real_sigue_contando_como_conflicto` en `backend/tests/test_lww.py` (modo de fallo MF-03, [Sección 11](11-Risks%20and%20Technical%20Debts.md)).
-
-**Lado del cliente (pendiente, plan P-02 de la Sección 11).** La cola debe retirar un elemento solo cuando recibe una respuesta 2xx. Hoy `obtenerSiguienteParaSincronizar()` no lo retira y la app aún no tiene cliente HTTP.
-
-### Saga: por qué no aplica
-
-Una saga coordina operaciones que modifican datos en varios servicios y necesita compensaciones si una falla a mitad de camino. En XALD no se da esa situación:
-
-* El registro de la transacción es una operación local en `:corefinanciero`, y ocurre antes de cualquier llamada externa.
-* La categorización (Gemini) y la sincronización (backend) son pasos posteriores que no deshacen el registro: si fallan, se reintentan o la transacción queda "Sin Categorizar", pero no se compensa nada.
-* Solo hay un servicio que escribe estado remoto (el backend), así que no hay transacción distribuida que coordinar.
-
-Si en el futuro se extrae un servicio que también modifique estado (ver [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md)), este argumento debe revisarse.
-
-### Limitaciones declaradas
-
-* El estado de deduplicación (`ultima_version`) vive en memoria y se pierde con cada reinicio o cuando Render duerme el servicio. Un reenvío posterior al reinicio se tratará como primera recepción. Se resuelve junto con la persistencia pendiente (A-02 en `aspectos.md`, plan P-04 de la Sección 11).
-* La resolución depende de que el reloj del dispositivo sea confiable, riesgo ya registrado en arc42 §10.
-
----
-
-## 8.6 Garantías de consistencia por operación
-
-El modelo es Offline-First ([ADR-0001](../adr/0001-patron-offline-first.md)): el dispositivo es la fuente de verdad inmediata y el backend se pone al día de forma eventual. Cada operación real del sistema declara qué garantía de consistencia ofrece y se contrasta con el código del repositorio. Donde la implementación todavía no alcanza la garantía declarada, se dice y se enlaza al plan de la [Sección 11](11-Risks%20and%20Technical%20Debts.md).
-
-| # | Operación (real) | Garantía declarada | Dónde se cumple en el código | Contraste con el código |
+| Modo de fallo | Mitigación declarada | Dónde se declara | Implementación en el código | Estado |
 |---|---|---|---|---|
-| **OP-01** | `InformacionFinanciera.guardarTransaccion(monto, comercio)` | **Fuerte local.** Escritura de efecto único por llamada: un monto no positivo se rechaza sin cambiar el estado, y lo guardado se ve de inmediato en las lecturas siguientes. | `XALDAPP/corefinanciero/src/main/java/com/proyecto/xald/corefinanciero/GestorCoreFinanciero.kt:13-24` | **Cumple en lo local.** Límites: guarda en memoria (línea 11), sin durabilidad ni cifrado hoy; sin control de concurrencia; y **no es idempotente**: cada llamada genera un `UUID` nuevo (línea 17), así que procesar dos veces el mismo SMS crea dos transacciones distintas. |
-| **OP-02** | `obtenerUltimaTransaccion()` | **Lectura de la propia escritura** (*read-your-writes*) dentro del dispositivo. | `GestorCoreFinanciero.kt:26-28` | **Cumple** en un mismo proceso (lee la misma lista que escribe OP-01). Sin prueba automatizada directa. |
-| **OP-03** | `obtenerPendientesSincronizacion()` | **Fuerte local.** Devuelve toda transacción local no confirmada (`sincronizado == false`) como `PayloadSincronizacionDTO`. | `GestorCoreFinanciero.kt:30-41` | **Cumple y verificada** por `XALDAPP/app/src/test/java/com/proyecto/xald/Cortevertical.kt:44-45` (tras guardar, hay 1 pendiente). Límite: nada marca `sincronizado = true`, así que la lista nunca se reduce (plan P-02). |
-| **OP-04** | `ColaSincronizacionService.encolarTransaccion(payload)` | **Entrega al menos una vez, orden FIFO local** (§8.5): el elemento se conserva hasta recibir una respuesta 2xx. | `XALDAPP/syncqueue/src/main/java/ColaSincronizacion.kt:13-15` y `21-23` | **Parcial.** Conserva el elemento (nunca lo retira), pero no deduplica por `idTransaccion`, guarda en memoria y no confirma envíos (plan P-02). |
-| **OP-05** | `ProcesarNotificacionUseCase.ejecutar(sms)` | **Orden «primero escribir en local, después encolar»:** el registro local ocurre antes de cualquier llamada externa y no se compensa si el encolado falla (la saga no aplica, §8.5). | `XALDAPP/app/src/main/java/ProcesarNotificacionUseCase.kt:26-37` | **Cumple el orden** (guardar en líneas 26-29, encolar en 32-37). Límites: ignora el resultado de `encolarTransaccion` y solo encola `pendientes.lastOrNull()` (línea 34); ninguna prueba lo invoca (el corte vertical repite los pasos a mano, hallazgo H-4 de `EVIDENCIA-S9.md`). |
-| **OP-06** | `POST /api/v1/transacciones` | **Eventual entre dispositivos, convergente por Last-Write-Wins e idempotente por `id_transaccion`:** un reenvío idéntico responde 202 sin cambios; ante un conflicto real gana la `fecha_transaccion` más reciente ([ADR-0011](../adr/0011-resolucion-conflictos-lww.md)); el resultado no depende del orden de llegada. `202` significa «aceptada», no «persistida». | `backend/app/main.py:114-149` (idempotencia 121-128; LWW 130-138) | **Cumple y verificada** (ver Verificación 1). Límites: `ultima_version` vive en memoria (línea 60) y se pierde al reiniciar o cuando Render duerme el servicio (plan P-04); «más reciente» depende del reloj del dispositivo. |
-| **OP-07** | `GET /metrics` | **Débil a propósito:** contadores monótonos por proceso; sin persistencia, se reinician con cada despliegue ([ADR-0010](../adr/0010-observabilidad.md)). | `backend/app/main.py:44-56` y `102-104` | **Cumple.** Sirve para observar, no para contabilizar. |
+| Gemini **no responde** (timeout) | Corte a 5 s y hasta 3 reintentos con espera creciente (~2 s, ~4 s) | arc42 §6 (ESC-02), §10 | `XALDAPP/aigemini/src/main/java/CategorizadorGemini.kt` es un mock; no hay cliente HTTP, timeout ni reintentos | **Pendiente declarado** ([ADR-0012](../adr/0012-aplazamiento-integracion-gemini.md)) — plan P-03 |
+| Gemini **falla tras los reintentos** | Guardar la transacción como "Sin Categorizar"; no se pierde el registro | arc42 §6 (ESC-02), §10 | El mock siempre devuelve una categoría, así que esta rama no existe | **Pendiente declarado** — plan P-03 |
+| Reclasificación posterior al volver el servicio | Reclasificar automáticamente las "Sin Categorizar" | arc42 §6, §11 | No existe el componente | **Pendiente declarado** — plan P-05 |
+| Gemini **responde tarde** (después del corte de 5 s) | Se trata como fallo: la respuesta tardía se descarta y la transacción se atiende en la reclasificación posterior | Esta tabla | No implementado | **Pendiente declarado** — plan P-03 |
+| Backend **no responde** al sincronizar | La transacción permanece en la cola y se reenvía al reconectar, en orden cronológico | arc42 §1 | `ColaSincronizacion` guarda en memoria (`mutableListOf`); no hay cliente HTTP ni reenvío | **Parcial:** encolado implementado; envío y reintento pendientes ([EVIDENCIA-S9.md](../EVIDENCIA-S9.md), H-3) — plan P-01 |
+| Backend recibe la **misma transacción dos veces** | Idempotencia por `id_transaccion`; LWW solo para conflictos reales | [ADR-0011](../adr/0011-resolucion-conflictos-lww.md), §8.5 | `backend/app/main.py` (`ultima_version`, `xald_sync_duplicados_total`) con pruebas en `backend/tests/test_lww.py` | **Implementado y probado** en el backend; la cola debe retirar lo confirmado — plan P-02 |
+| Backend **pierde su estado** al reiniciarse | Persistencia del estado, junto con la migración a SQLite/Room | ADR-0011, `aspectos.md` (A-02) | El estado vive solo en memoria | **Pendiente declarado** — plan P-04 |
 
-**Lo que el sistema NO garantiza:** que dos dispositivos vean los mismos datos al mismo tiempo, ni que el backend conserve las versiones tras un reinicio, ni que el orden de llegada coincida con el orden real de los hechos. La fuente de verdad del usuario es siempre su dispositivo.
+## 11.3 Plan para las mitigaciones pendientes
 
-### Verificación de dos operaciones contra la implementación
+Cada pendiente de las tablas anteriores tiene un paso concreto, una semana objetivo y la prueba que lo dará por cerrado. Lo que no llegue a la semana objetivo se reporta en `correcciones.md` con su nueva fecha.
 
-**Verificación 1 — `POST /api/v1/transacciones` (OP-06): idempotencia y Last-Write-Wins.** Promete consistencia eventual, así que se verifica **dónde se acepta el desfase y qué lo reconcilia**.
+| ID | Qué se implementa | Modos de fallo que cierra | Semana objetivo | Responsable | Cómo se verifica |
+|---|---|---|---|---|---|
+| **P-01** | Cliente HTTP en `:syncqueue` (timeout que cubra el cold start, calentamiento con `GET /health` y reintentos con espera creciente) y alineación del payload de Android con `TransaccionDTO` (`moneda`, `categoria`, `origen_datos`) | MF-01, MF-02 | Semana 13 | *Por asignar* | Prueba unitaria con servidor simulado que no responde y que responde tarde: la transacción sigue en la cola y se reintenta |
+| **P-02** | Que `ColaSincronizacion` retire un elemento solo al recibir 2xx (`confirmarEnvio(id)`) | MF-03 (lado cliente) | Semana 13 | *Por asignar* | Prueba unitaria: tras un 202 la cola baja en 1; tras un error, no |
+| **P-03** | Cliente real de Gemini en `CategorizadorGemini` con corte de 5 s, 3 reintentos, «Sin Categorizar» al agotarlos y descarte de respuestas tardías; captura del fallo en `ProcesarNotificacionUseCase` | MF-04, MF-05, MF-06 | Semana 14, condicionada a resolver la llave ([ADR-0012](../adr/0012-aplazamiento-integracion-gemini.md), [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md)) | *Por asignar* | Prueba con un `ServicioCategorizacion` falso que lanza excepción o tarda más de 5 s: la transacción se guarda como «Sin Categorizar» |
+| **P-04** | Persistencia de `ultima_version` en el backend con clave única por `id_transaccion` | MF-03 tras reinicio | Semana 14 | *Por asignar* | Prueba: reiniciar la app de pruebas y reenviar la misma transacción no la cuenta como nueva |
+| **P-05** | Componente de reclasificación de transacciones «Sin Categorizar» | MF-05 | Semana 15 | *Por asignar* | Prueba: al volver el servicio, las transacciones «Sin Categorizar» reciben categoría |
 
-- *Garantía declarada:* un reenvío idéntico no cambia el estado ni cuenta como conflicto; con dos versiones distintas de la misma transacción gana la más reciente, sin importar cuál llegue primero.
-- *Dónde se acepta el desfase:* el dispositivo responde al usuario sin esperar al backend (OP-01 y OP-05); el backend puede ir atrás del dispositivo todo el tiempo que no haya red.
-- *Qué lo reconcilia:* `backend/app/main.py`. El reenvío idéntico se detecta en las líneas 121-128 (`fecha_transaccion == previa`), responde 202 y solo incrementa `xald_sync_duplicados_total`. El conflicto real se resuelve en las líneas 130-138, y `ultima_version[id]` solo se sobrescribe si la fecha entrante es mayor (líneas 130-131). El backend corre con un solo proceso (`backend/Dockerfile`, sin `--workers`) y `registrar_transaccion` no tiene ningún `await` entre leer y escribir `ultima_version`, así que la comprobación y la asignación no se intercalan.
-- *Pruebas que lo verifican* (`backend/tests/test_lww.py`): `test_mf03_reenvio_identico_es_idempotente_y_no_cuenta_como_conflicto` (líneas 112-124), `test_version_antigua_no_sobrescribe_a_la_reciente` (56-63) y `test_version_reciente_gana_si_llega_despues` (48-54). Los dos órdenes de llegada terminan en la misma versión. Ejecución: `python -m pytest backend/tests/` → 11 pruebas en verde. Medición contra el sistema desplegado: `backend/scripts/medir_esc05.py` (30/30, ver [ADR-0011](../adr/0011-resolucion-conflictos-lww.md)).
-- *Qué no cubre:* reinicios del servicio (plan P-04) ni relojes de dispositivo desajustados.
+# Glossary
 
-**Verificación 2 — `guardarTransaccion` y `obtenerPendientesSincronizacion` (OP-01 y OP-03): la escritura local se ve de inmediato.** Promete consistencia fuerte local, así que se busca **dónde es atómica**.
-
-- *Garantía declarada:* lo guardado queda disponible en la lectura siguiente, y un monto no positivo se rechaza sin cambiar el estado.
-- *Dónde se cumple:* `XALDAPP/corefinanciero/src/main/java/com/proyecto/xald/corefinanciero/GestorCoreFinanciero.kt`: línea 14 (rechazo antes de tocar el estado), línea 23 (un único `add`, que es la escritura completa) y líneas 30-41 (la proyección de pendientes se lee de la misma lista). No hay transacción de base de datos (`BEGIN`/`COMMIT`) porque todavía no hay base de datos: la atomicidad viene de que la escritura es una sola operación sobre una sola lista. Cuando exista Room, la escritura de la entidad debe ir en una transacción `@Transaction` del DAO.
-- *Prueba que lo verifica:* `XALDAPP/app/src/test/java/com/proyecto/xald/Cortevertical.kt:37-45` hace `assertTrue(guardadoExitoso)` y `assertEquals(1, pendientes.size)` justo después de guardar. El CI la ejecuta con `./gradlew testDebugUnitTest`.
-- *Qué no cubre:* el rechazo de montos no positivos (línea 14) no tiene prueba propia, y el almacenamiento es en memoria y sin cifrar (A-02 y A-04 siguen pendientes).
-
----
-
-## 8.7 Diseño de Caché
-
-**Estado actual:** el sistema no tiene ninguna caché implementada (no hay Redis, Memcached ni TTL en el código). Lo que sigue es un **diseño propuesto**, no código existente. Las cachés de este diseño se justifican por RO-02 (costo $0, el plan gratuito de Gemini limita las solicitudes) y por ESC-01 (respuesta rápida al registrar).
-
-| Qué se cachea | Dónde | Cuánto dura | Por qué |
-| :--- | :--- | :--- | :--- |
-| Categoría por comercio (`comercio` → `CategoriaResultado`) | Tabla Room propia de `:aigemini` en el dispositivo (contenedor *Caché de categorías* del C2). Solo `:aigemini` la lee y la escribe. | Hasta que el usuario corrija la categoría; revisión máxima de 30 días. | Evita volver a consultar a Gemini por un comercio ya conocido: menos llamadas y menos consumo de la capa gratuita. |
-| Saldo consolidado y totales del reporte | En memoria dentro de `:app` (estado de la pantalla) | Mientras viva la pantalla o hasta la siguiente escritura. | Evita recalcular la suma de todas las transacciones en cada redibujado. |
-| Backend XALD | **No hay caché.** | — | El único estado es `ultima_version`, que es la fuente de decisión de LWW, no una copia. Cachearlo duplicaría la verdad. La API no tiene lecturas que justifiquen una caché: solo recibe escrituras. |
-
-El plazo de 30 días es una propuesta del equipo y se ajustará con datos reales de uso.
-
----
-
-## 8.8 Política de Invalidación tras Escritura
-
-**Regla declarada:** *toda escritura invalida la caché derivada de ella antes de devolver el control.* Es invalidación por escritura (*write-invalidate*), no por tiempo, salvo el límite de 30 días de la categoría.
-
-| Escritura | Qué se invalida | Cómo | Qué se rompe si no se invalida |
-| :--- | :--- | :--- | :--- |
-| `guardarTransaccion(...)` (OP-01) | Saldo consolidado y totales del reporte | `:app` descarta el valor en memoria al recibir `true` y lo recalcula en la siguiente lectura. | La pantalla muestra un saldo que no incluye la transacción recién registrada: el usuario ve un gasto en la lista pero no en el total. |
-| El usuario corrige la categoría de una transacción | La entrada `comercio → categoría` de ese comercio, y los totales por categoría | Se sobrescribe con la categoría elegida por el usuario, que tiene prioridad sobre la de Gemini, y se descartan los totales. | El siguiente SMS del mismo comercio vuelve a llegar con la categoría equivocada. |
-| Reclasificación posterior de «Sin Categorizar» (Sección 6.2) | Totales por categoría | Se descartan al cambiar la categoría. | El reporte por categoría sigue contando la transacción como «Sin Categorizar». |
-| Vence el plazo de 30 días de una categoría | La entrada `comercio → categoría` | La siguiente consulta de ese comercio va a Gemini y reemplaza la entrada. | Un comercio que cambió de giro conserva una categoría vieja para siempre. |
-| Respuesta `202` del backend | Ninguna caché | La sincronización no cambia lo que el usuario ve: su dispositivo ya tiene la versión actual. | — |
-
-**Implementación:** ninguna. Es un plan que se implementa junto con las cachés de 8.7 y con la BD local (A-02). Cuando exista Room, la invalidación del saldo puede apoyarse en que Room avise los cambios de la tabla (consultas observables), de modo que la regla se cumpla sin código manual.
-
----
-
-## 8.9 Garantías del Flujo por Eventos
-
-El sistema no usa un broker de mensajes (ni Kafka ni RabbitMQ; ver la nota de brokers en `docs/c4/c2.md`). El único flujo por eventos es el que va del dispositivo al backend por la cola de sincronización (`:syncqueue`), y su garantía es:
-
-**Entrega al menos una vez, con consumo idempotente (efecto neto: una sola vez).**
-
-* **Qué asume:**
-  1. Cada transacción tiene un UUID único desde el origen (`id_transaccion`).
-  2. La cola solo retira un elemento cuando el backend responde `202`; si no responde, se reenvía.
-  3. Reenviar la misma transacción no cambia el resultado, porque el backend la identifica por UUID y aplica idempotencia y LWW (§8.5, [ADR-0011](../adr/0011-resolucion-conflictos-lww.md)).
-  4. Los relojes de los dispositivos son razonablemente confiables.
-* **Por qué no «como máximo una vez»:** perdería transacciones cada vez que se cae la red, lo que rompe ESC-05 (0 transacciones perdidas).
-* **Por qué no «exactamente una vez» a nivel de red:** exigiría coordinación transaccional entre el dispositivo y el backend, que no es posible con la red intermitente que asume Offline-First. Se obtiene el mismo efecto con al menos una vez más un receptor idempotente.
-* **Qué NO garantiza:** orden global entre transacciones distintas. Si el mismo payload llega dos veces, el contador `xald_transacciones_recibidas_total` sí lo cuenta dos veces (se incrementa en `main.py:115`, antes de la comprobación de idempotencia), aunque el dato no se duplica (MF-03, Sección 11).
-* **Estado:** el reenvío idempotente está implementado en el backend. Falta que la cola retire lo confirmado y que el cliente HTTP exista (Sección 11, MF-01, MF-03, planes P-01 y P-02).
+| Term | Definition |
+| --- | --- |
+| **ADR (Architecture Decision Record)** | Documento individual que registra una decisión de arquitectura, su contexto y sus consecuencias; en XALD se guardan como archivos separados en `docs/adr/`. |
+| **AES-256** | Algoritmo de cifrado simétrico usado para proteger la base de datos financiera almacenada localmente en el dispositivo. |
+| **Android Keystore** | Almacén seguro del sistema operativo Android donde se guardan las llaves criptográficas que protegen el cifrado AES-256 de la base de datos local. |
+| **API REST** | Estilo de interfaz de comunicación mediante peticiones HTTP (GET, POST, PUT) que usa XALD para comunicarse con el Backend XALD y con la API de Gemini. |
+| **BroadcastReceiver** | Mecanismo nativo de Android que permite a la app "escuchar" eventos del sistema operativo, como la llegada de un SMS, sin intervención directa del usuario. |
+| **C4 Model** | Modelo jerárquico de documentación de arquitectura de software en cuatro niveles de abstracción: Contexto (C1), Contenedores (C2), Componentes (C3) y Código (C4). |
+| **Carga cognitiva** | Esfuerzo mental que le exige a una persona una tarea; en XALD se usa para explicar por qué el registro manual de gastos genera abandono de la app (ver Requirements Overview, OB-01). |
+| **CSV (Comma-Separated Values)** | Formato de archivo de texto plano que el equipo consideró inicialmente como una vía alterna de captura de transacciones (exportado desde el banco). Se evaluó y se decidió **no usarlo** como método de entrada de datos del sistema (ver [ADR-0005](docs/adr/0005-reduccion-de-funcionalidades.md)). |
+| **Gastos hormiga** | Expresión coloquial para los gastos pequeños y frecuentes (café, transporte, snacks) que, por su bajo monto, suelen no registrarse manualmente y terminan perdiendo integridad el historial financiero del usuario. |
+| **Google Gemini API** | Servicio externo de inteligencia artificial de Google, usado por XALD para inferir la categoría de gasto a partir del nombre del comercio, cuando el Regex Engine no logra reconocerlo. |
+| **Habeas Data** | Derecho de las personas a conocer, actualizar y rectificar la información que existe sobre ellas en bases de datos, desarrollado por la Ley 1581 de 2012 en Colombia. |
+| **JSON (JavaScript Object Notation)** | Formato de texto usado para el intercambio de datos entre XALD y sus servicios externos (Gemini API, Backend XALD), tanto en las solicitudes como en las respuestas. |
+| **Ley 1581 de 2012** | Normativa colombiana de protección de datos personales (Habeas Data), en concordancia con los artículos 15 y 20 de la Constitución Política; establece las restricciones legales que sigue XALD para el manejo de la información financiera del usuario. |
+| **LWW (Last-Write-Wins)** | Estrategia de resolución de conflictos de sincronización: cuando hay un cruce entre la información del celular y la del servidor, se conserva la transacción con la marca de tiempo más reciente. |
+| **Offline-First** | Patrón arquitectónico en el que la aplicación guarda y muestra la información primero de forma local, sin depender de tener conexión a internet para funcionar. |
+| **Open Banking** | Modelo de APIs bancarias oficiales que permitiría a XALD leer transacciones directamente desde el banco; no está disponible para el equipo, por lo que XALD depende de leer los SMS (ver RT-04). |
+| **Privacidad desde el Diseño (Privacy by Design)** | Principio de diseño que exige incorporar la protección de datos personales desde el inicio del desarrollo, y no como un añadido posterior; en XALD se aplica limitando lo que se envía a la Gemini API solo al comercio y el monto (ver Solution Strategy y RL-01). |
+| **RECEIVE_SMS** | Permiso de Android requerido para que una aplicación pueda leer los mensajes de texto (SMS) entrantes en segundo plano. |
+| **Regex (Expresiones Regulares)** | Patrones de texto usados por el Processing & Parser Module para reconocer e interpretar automáticamente el comercio y el monto dentro del texto plano de un SMS bancario. |
+| **Sin Categorizar** | Categoría temporal que se le asigna a una transacción cuando el servicio de IA (Gemini API) no responde o falla, para que el registro del gasto nunca se bloquee. |
+| **Sync Queue** | Cola de sincronización local donde se almacenan las transacciones pendientes de subir al Backend XALD, cada una con su timestamp y UUID, hasta que el dispositivo recupera la conexión. |
+| **Timestamp** | Marca de tiempo asociada a cada transacción, usada para determinar el orden cronológico y resolver conflictos de sincronización (LWW). |
+| **TLS 1.3** | Protocolo de seguridad que cifra las comunicaciones HTTPS entre la app XALD y sus servicios externos (Backend XALD y Gemini API). |
+| **UUID (Universally Unique Identifier)** | Código único que identifica cada transacción, usado junto con el timestamp para mantener el orden cronológico exacto al sincronizar. |
+| **XALD** | Nombre del proyecto y de la aplicación móvil de gestión financiera personal desarrollada por el equipo. |
