@@ -52,71 +52,74 @@ Cada módulo del proyecto representa un **Bounded Context** (Contexto Delimitado
 
 ---
 
-## 8.5 Diseño de idempotencia en la sincronización
 
-### Problema
+---
 
-La cola de sincronización entrega las transacciones con la garantía de "al menos una vez": si el dispositivo no recibe la respuesta del backend (se corta la red o expira el tiempo), reenvía la misma transacción. Por eso el backend puede recibir la misma transacción dos veces, y ese reenvío no debe producir un segundo registro ni alterar saldos.
+## 8.5 Consistencia de Datos: Operación → Garantía
 
-### Diseño
+Esta tabla declara, para cada operación real del sistema, qué garantía de consistencia da y en qué estado está en el código. El modelo es Offline-First (ADR-0001): el dispositivo es la fuente de verdad inmediata y el backend se pone al día de forma eventual.
 
-**Clave de idempotencia.** `id_transaccion` (UUID generado en el dispositivo, definido en `backend/app/dtos.py`) identifica de forma única cada transacción. El cliente la conserva en la cola hasta recibir una respuesta 2xx.
+| Operación | Dónde está | Garantía de consistencia | Estado en el código |
+| :--- | :--- | :--- | :--- |
+| `guardarTransaccion(monto, comercio)` | `:corefinanciero` (`GestorCoreFinanciero`) | **Escritura local inmediata y lectura de lo propio:** si devuelve `true`, la siguiente lectura en el mismo dispositivo ya ve la transacción. Rechaza `monto <= 0`. El UUID se genera al guardar. | Implementada. Hoy guarda en una lista en memoria (`mutableListOf`); Room cifrada con AES-256 está pendiente. |
+| `obtenerUltimaTransaccion()` / `obtenerPendientesSincronizacion()` | `:corefinanciero` | **Consistencia fuerte local:** lee del mismo almacén donde se escribió, sin red de por medio. | Implementada (misma limitación de memoria). |
+| `encolarTransaccion(payload)` | `:syncqueue` (`ColaSincronizacion`) | **Orden FIFO local, entrega al menos una vez:** el payload permanece en la cola hasta que se confirme su envío. | Parcial. La cola es una lista en memoria y `obtenerSiguienteParaSincronizar()` no retira el elemento; falta retirarlo al recibir `202`. |
+| `POST /api/v1/transacciones` | Backend XALD (`registrar_transaccion`) | **Idempotente por `id_transaccion` y Last-Write-Wins:** si llegan dos versiones del mismo UUID, se conserva la de `fecha_transaccion` más reciente, sin importar el orden de llegada. Entre dispositivos la consistencia es **eventual**. | Implementada en `main.py`. El estado (`ultima_version`) está en memoria y se reinicia con cada despliegue (ADR-0008, ADR-0011). |
+| `GET /metrics` | Backend XALD | **Sin garantía entre reinicios:** los contadores son del proceso y vuelven a cero al reiniciarse (ADR-0010). | Implementada. |
+| `GET /health` | Backend XALD | No toca estado. | Implementada. |
 
-**Comportamiento del receptor** (`POST /api/v1/transacciones`):
+**Lo que el sistema NO garantiza:** que dos dispositivos vean los mismos datos al mismo tiempo, ni que el backend conserve las versiones tras un reinicio, ni que el orden de llegada coincida con el orden real de los hechos. La fuente de verdad del usuario es siempre su dispositivo.
 
-| Caso | Condición | Respuesta | Efecto |
-|---|---|---|---|
-| Primera recepción | `id_transaccion` no existe | 202 `ACEPTADO` | Se guarda la versión. |
-| Reenvío idéntico | mismo `id_transaccion` y misma `fecha_transaccion` | 202 `ACEPTADO` (misma respuesta) | Sin cambios. Se cuenta como duplicado, no como conflicto. |
-| Conflicto real | mismo `id_transaccion`, distinta `fecha_transaccion` | 202 `ACEPTADO` | Se aplica Last-Write-Wins ([ADR-0011](../adr/0011-resolucion-conflictos-lww.md)) y se cuenta como conflicto resuelto. |
+## 8.6 Verificación de Dos Operaciones contra la Implementación
 
-Con entrega "al menos una vez" y un receptor idempotente, el efecto neto es el de "exactamente una vez".
+**Operación 1 — `POST /api/v1/transacciones` (Last-Write-Wins).** Garantía declarada: gana la versión más reciente, sin importar el orden de llegada.
 
-**Implementación.** `registrar_transaccion` en `backend/app/main.py` separa los dos casos: un reenvío idéntico responde 202 sin modificar `ultima_version` e incrementa `xald_sync_duplicados_total`; solo un conflicto real incrementa `xald_sync_conflictos_resueltos_total`. Lo verifican `test_mf03_reenvio_identico_es_idempotente_y_no_cuenta_como_conflicto` y `test_mf03_conflicto_real_sigue_contando_como_conflicto` en `backend/tests/test_lww.py` (modo de fallo MF-03, [Sección 11](11-Risks%20and%20Technical%20Debts.md)).
+* Se cumple en `backend/app/main.py`, función `registrar_transaccion`: `previa = ultima_version.get(transaccion.id_transaccion)` (línea 113) y la actualización solo ocurre si `transaccion.fecha_transaccion > previa` (líneas 114-115). Cada colisión suma `xald_sync_conflictos_resueltos_total` y deja el log `conflicto_resuelto_lww` con `gano="entrante"` o `"existente"` (líneas 116-121).
+* Se verifica en `backend/tests/test_lww.py`: `test_version_reciente_gana_si_llega_despues`, `test_version_antigua_no_sobrescribe_a_la_reciente` (la vieja llega después y no gana), `test_primera_version_no_cuenta_como_conflicto` y `test_medicion_esc05_30_transacciones_en_conflicto`.
+* Límite: la garantía vale mientras el proceso siga vivo, porque `ultima_version` está en memoria.
 
-**Lado del cliente (pendiente, plan P-02 de la Sección 11).** La cola debe retirar un elemento solo cuando recibe una respuesta 2xx. Hoy `obtenerSiguienteParaSincronizar()` no lo retira y la app aún no tiene cliente HTTP.
+**Operación 2 — `guardarTransaccion` (escritura local).** Garantía declarada: solo se guarda una transacción válida, con identidad única, y queda lista para sincronizar.
 
-### Saga: por qué no aplica
+* Se cumple en `GestorCoreFinanciero.kt`: `if (monto <= 0.0) return false` rechaza montos inválidos, `UUID.randomUUID()` crea la identidad y `sincronizado = false` la marca como pendiente. Después `obtenerPendientesSincronizacion()` filtra `!it.sincronizado` y arma el `PayloadSincronizacionDTO`.
+* Coincide con el contrato del backend, donde `TransaccionDTO` exige `monto > 0` (`backend/app/dtos.py`).
+* Límite: el almacén es una lista en memoria y no sobrevive al cierre de la app, así que la durabilidad local aún no está cumplida hasta que se implemente Room.
 
-Una saga coordina operaciones que modifican datos en varios servicios y necesita compensaciones si una falla a mitad de camino. En XALD no se da esa situación:
+## 8.7 Diseño de Caché
 
-* El registro de la transacción es una operación local en `:corefinanciero`, y ocurre antes de cualquier llamada externa.
-* La categorización (Gemini) y la sincronización (backend) son pasos posteriores que no deshacen el registro: si fallan, se reintentan o la transacción queda "Sin Categorizar", pero no se compensa nada.
-* Solo hay un servicio que escribe estado remoto (el backend), así que no hay transacción distribuida que coordinar.
+**Estado actual:** el sistema no tiene ninguna caché implementada. Lo que sigue es un **diseño propuesto**, no código existente. Las cachés de este diseño se justifican por RO-02 (costo $0, el plan gratuito de Gemini limita las solicitudes) y por ESC-01 (respuesta rápida al registrar).
 
-Si en el futuro se extrae un servicio que también modifique estado (ver [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md)), este argumento debe revisarse.
+| Qué se cachea | Dónde | Cuánto dura | Por qué |
+| :--- | :--- | :--- | :--- |
+| Categoría por comercio (`comercio` → `CategoriaResultado`) | Tabla local en Room, dentro de `:aigemini`/`:corefinanciero` | Hasta que el usuario corrija la categoría; revisión máxima de 30 días. | Evita volver a consultar a Gemini por un comercio ya conocido: menos llamadas y menos consumo de la capa gratuita. |
+| Saldo consolidado y totales del reporte | En memoria dentro de `:app` (estado de la pantalla) | Mientras viva la pantalla o hasta la siguiente escritura. | Evita recalcular la suma de todas las transacciones en cada redibujado. |
+| Backend XALD | **No hay caché.** | — | El único estado es `ultima_version`, que es la fuente de decisión de LWW, no una copia. Cachearlo duplicaría la verdad. |
 
-### Limitaciones declaradas
+El plazo de 30 días es una propuesta del equipo y se ajustará con datos reales de uso.
 
-* El estado de deduplicación (`ultima_version`) vive en memoria y se pierde con cada reinicio o cuando Render duerme el servicio. Un reenvío posterior al reinicio se tratará como primera recepción. Se resuelve junto con la persistencia pendiente (A-02 en `aspectos.md`, plan P-04 de la Sección 11).
-* La resolución depende de que el reloj del dispositivo sea confiable, riesgo ya registrado en arc42 §10.
+## 8.8 Política de Invalidación tras Escritura
 
-## 8.6 Garantías de consistencia por operación
+**Regla declarada:** *toda escritura invalida la caché derivada de ella antes de devolver el control.* Es invalidación por escritura (write-invalidate), no por tiempo, salvo el límite de 30 días de la categoría.
 
-Cada operación real del sistema declara qué garantía de consistencia ofrece y se contrasta con el código del repositorio. Donde la implementación todavía no alcanza la garantía declarada, se dice y se enlaza al plan de la [Sección 11](11-Risks%20and%20Technical%20Debts.md).
+| Escritura | Qué se invalida | Cómo |
+| :--- | :--- | :--- |
+| `guardarTransaccion(...)` | Saldo consolidado y totales del reporte | `:app` descarta el valor en memoria al recibir `true` y lo recalcula en la siguiente lectura. |
+| El usuario corrige la categoría de una transacción | La entrada `comercio → categoría` de esa transacción | Se sobrescribe con la categoría elegida por el usuario, que tiene prioridad sobre la de Gemini. |
+| Reclasificación posterior de «Sin Categorizar» (Sección 6.2) | Totales por categoría | Se descartan al cambiar la categoría. |
+| Respuesta `202` del backend | Ninguna caché | La sincronización no cambia lo que el usuario ve: su dispositivo ya tiene la versión actual. |
 
-| # | Operación (real) | Garantía declarada | Dónde se cumple en el código | Contraste con el código |
-|---|---|---|---|---|
-| **OP-01** | `InformacionFinanciera.guardarTransaccion(monto, comercio)` | Escritura local de efecto único por llamada: un monto no positivo se rechaza sin cambiar el estado, y lo guardado se ve de inmediato en las lecturas siguientes. | `XALDAPP/corefinanciero/src/main/java/com/proyecto/xald/corefinanciero/GestorCoreFinanciero.kt:13-24` | **Cumple en lo local.** Límites: guarda en memoria (línea 11), sin durabilidad ni cifrado hoy; sin control de concurrencia; y **no es idempotente**: cada llamada genera un `UUID` nuevo (línea 17), así que procesar dos veces el mismo SMS crea dos transacciones distintas. |
-| **OP-02** | `obtenerUltimaTransaccion()` | Lectura de la propia escritura (*read-your-writes*) dentro del dispositivo. | `GestorCoreFinanciero.kt:26-28` | **Cumple** en un mismo proceso (lee la misma lista que escribe OP-01). Sin prueba automatizada directa. |
-| **OP-03** | `obtenerPendientesSincronizacion()` | Devuelve toda transacción local no confirmada (`sincronizado == false`) como `PayloadSincronizacionDTO`. | `GestorCoreFinanciero.kt:30-41` | **Cumple y verificada** por `XALDAPP/app/src/test/java/com/proyecto/xald/Cortevertical.kt:44-45` (tras guardar, hay 1 pendiente). Límite: nada marca `sincronizado = true`, así que la lista nunca se reduce (plan P-02). |
-| **OP-04** | `ColaSincronizacionService.encolarTransaccion(payload)` | Entrega «al menos una vez» (§8.5): el elemento se conserva hasta recibir una respuesta 2xx. | `XALDAPP/syncqueue/src/main/java/ColaSincronizacion.kt:13-15` y `21-23` | **Parcial.** Conserva el elemento (nunca lo retira), pero no deduplica por `idTransaccion`, guarda en memoria y no confirma envíos (plan P-02). |
-| **OP-05** | `ProcesarNotificacionUseCase.ejecutar(sms)` | Orden «primero escribir en local, después encolar»: el registro local ocurre antes de cualquier llamada externa y no se compensa si el encolado falla (la saga no aplica, §8.5). | `XALDAPP/app/src/main/java/ProcesarNotificacionUseCase.kt:26-37` | **Cumple el orden** (guardar en líneas 26-29, encolar en 32-37). Límites: ignora el resultado de `encolarTransaccion` y solo encola `pendientes.lastOrNull()` (línea 34); ninguna prueba lo invoca (el corte vertical repite los pasos a mano, hallazgo H-4 de `EVIDENCIA-S9.md`). |
-| **OP-06** | `POST /api/v1/transacciones` | Idempotente por `id_transaccion` (un reenvío idéntico responde 202 sin cambios); ante un conflicto real gana la `fecha_transaccion` más reciente (LWW, [ADR-0011](../adr/0011-resolucion-conflictos-lww.md)); el resultado no depende del orden de llegada. `202` significa «aceptada», no «persistida». | `backend/app/main.py:114-149` (idempotencia 121-128; LWW 130-138) | **Cumple y verificada** (ver Verificación 1). Límites: `ultima_version` vive en memoria (línea 60) y se pierde al reiniciar o cuando Render duerme el servicio (plan P-04); «más reciente» depende del reloj del dispositivo. |
-| **OP-07** | `GET /metrics` | Contadores monótonos por proceso; sin persistencia, se reinician con cada despliegue ([ADR-0010](../adr/0010-observabilidad.md)). | `backend/app/main.py:44-56` y `102-104` | **Cumple.** Es consistencia débil a propósito: sirve para observar, no para contabilizar. |
+**Implementación:** ninguna. Es un plan que se implementa junto con las cachés de 8.7. Cuando exista Room, la invalidación del saldo puede apoyarse en que Room avise los cambios de la tabla.
 
-### Verificación de dos operaciones contra la implementación
+## 8.9 Garantías del Flujo por Eventos
 
-**Verificación 1 — `POST /api/v1/transacciones` (OP-06): idempotencia y Last-Write-Wins.**
+El sistema no usa un broker de mensajes (ni Kafka ni RabbitMQ). El único flujo por eventos es el que va del dispositivo al backend por la cola de sincronización (`:syncqueue`), y su garantía es:
 
-- *Garantía declarada:* un reenvío idéntico no cambia el estado ni cuenta como conflicto; con dos versiones distintas de la misma transacción gana la más reciente, sin importar cuál llegue primero.
-- *Dónde se cumple:* `backend/app/main.py`. El reenvío idéntico se detecta en las líneas 121-128 (`fecha_transaccion == previa`), responde 202 y solo incrementa `xald_sync_duplicados_total`. El conflicto real se resuelve en las líneas 130-138, y `ultima_version[id]` solo se sobrescribe si la fecha entrante es mayor (líneas 130-131). El backend corre con un solo proceso (`backend/Dockerfile`, sin `--workers`) y `registrar_transaccion` no tiene ningún `await` entre leer y escribir `ultima_version`, así que la comprobación y la asignación no se intercalan.
-- *Pruebas que lo verifican* (`backend/tests/test_lww.py`): `test_mf03_reenvio_identico_es_idempotente_y_no_cuenta_como_conflicto` (líneas 112-124), `test_version_antigua_no_sobrescribe_a_la_reciente` (56-63) y `test_version_reciente_gana_si_llega_despues` (48-54). Los dos órdenes de llegada terminan en la misma versión. Ejecución: `python -m pytest backend/tests/` → 11 pruebas en verde. Medición contra el sistema desplegado: `backend/scripts/medir_esc05.py` (30/30, ver [ADR-0011](../adr/0011-resolucion-conflictos-lww.md)).
-- *Qué no cubre:* reinicios del servicio (plan P-04) ni relojes de dispositivo desajustados.
+**Entrega al menos una vez, con consumo idempotente (efecto neto: una sola vez).**
 
-**Verificación 2 — `guardarTransaccion` y `obtenerPendientesSincronizacion` (OP-01 y OP-03): la escritura local se ve de inmediato.**
+* **Qué asume:**
+  1. Cada transacción tiene un UUID único desde el origen (`id_transaccion`).
+  2. La cola solo retira un elemento cuando el backend responde `202`; si no responde, se reenvía.
+  3. Reenviar la misma transacción no cambia el resultado, porque el backend la identifica por UUID y aplica LWW (ADR-0011).
+  4. Los relojes de los dispositivos son razonablemente confiables.
+* **Qué NO garantiza:** orden global entre transacciones distintas ni exactamente una vez a nivel de red. Si el mismo payload llega dos veces, el contador `xald_transacciones_recibidas_total` sí lo cuenta dos veces, aunque el dato no se duplica (MF-03, Sección 11).
+* **Estado:** el reenvío idempotente está implementado en el backend. Falta que la cola retire lo confirmado y que el cliente HTTP exista (Sección 11, MF-01 y MF-03).
 
-- *Garantía declarada:* lo guardado queda disponible en la lectura siguiente, y un monto no positivo se rechaza sin cambiar el estado.
-- *Dónde se cumple:* `XALDAPP/corefinanciero/src/main/java/com/proyecto/xald/corefinanciero/GestorCoreFinanciero.kt`: línea 14 (rechazo), línea 23 (`add`) y líneas 30-41 (la proyección de pendientes se lee de la misma lista).
-- *Prueba que lo verifica:* `XALDAPP/app/src/test/java/com/proyecto/xald/Cortevertical.kt:37-45` hace `assertTrue(guardadoExitoso)` y `assertEquals(1, pendientes.size)` justo después de guardar. El CI la ejecuta con `./gradlew testDebugUnitTest`.
-- *Qué no cubre:* el rechazo de montos no positivos (línea 14) no tiene prueba propia, y el almacenamiento es en memoria y sin cifrar (A-02 y A-04 siguen pendientes).
