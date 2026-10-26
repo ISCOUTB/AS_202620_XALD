@@ -49,7 +49,7 @@ jobs:
           python-version: '3.12'
 
       - name: Instalar dependencias del backend
-        run: pip install --no-cache-dir --only-binary :all: -r requirements.lock
+        run: pip install --no-cache-dir --only-binary :all: -r requirements.txt
         working-directory: backend
 
       - name: Ejecutar pruebas del backend (pytest)
