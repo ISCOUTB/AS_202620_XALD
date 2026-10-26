@@ -29,7 +29,7 @@ jobs:
       - name: Ejecutar pruebas unitarias de los módulos
         run: ./gradlew testDebugUnitTest
         working-directory: XALDAPP
-        
+
       - name: Instalar Redocly CLI
         run: npm install -g --ignore-scripts @redocly/cli@1.25.0
 
@@ -49,7 +49,7 @@ jobs:
           python-version: '3.12'
 
       - name: Instalar dependencias del backend
-        run: pip install -r requirements.txt
+        run: pip install --no-cache-dir --only-binary :all: -r requirements.txt
         working-directory: backend
 
       - name: Ejecutar pruebas del backend (pytest)
