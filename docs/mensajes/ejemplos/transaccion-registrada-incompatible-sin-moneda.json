@@ -1,0 +1,8 @@
+{
+  "id_transaccion": "c0a8012e-0000-4000-8000-000000000001",
+  "monto": 5000.0,
+  "comercio": "Tienda D1",
+  "categoria": "Supermercado",
+  "fecha_transaccion": "2026-09-30T12:00:00Z",
+  "origen_datos": "SMS_REGEX"
+}

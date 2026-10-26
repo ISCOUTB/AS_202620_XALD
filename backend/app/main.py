@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, status
@@ -69,6 +70,22 @@ def verificar_llave(llave: str = Header(default="", alias="X-API-Key")):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key inválida")
 
 
+# ---------------------------------------------------------------------------
+# Contrato del mensaje (docs/mensajes/README.md): versión mayor que este consumidor entiende.
+# Un cambio compatible NO sube esta versión; uno incompatible sí, y el consumidor viejo lo
+# rechaza con 400 para que el cliente lo mande a su cola de fallidos en vez de reintentar.
+# ---------------------------------------------------------------------------
+VERSIONES_ESQUEMA_SOPORTADAS = {"1"}
+
+
+def verificar_version_esquema(version: str = Header(default="1", alias="X-Version-Esquema")):
+    if version.strip() not in VERSIONES_ESQUEMA_SOPORTADAS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Versión de esquema no soportada: {version}. Soportadas: {sorted(VERSIONES_ESQUEMA_SOPORTADAS)}",
+        )
+
+
 app = FastAPI(
     title="API de Sincronización Financiera - Proyecto XALD",
     version="1.0.0"
@@ -77,10 +94,16 @@ app = FastAPI(
 
 @app.middleware("http")
 async def registrar_peticion(request: Request, call_next):
+    # Trazabilidad productor -> consumidor: el cliente manda X-Correlation-Id (estable entre
+    # reintentos); si no llega, se genera uno para no perder la traza de esta petición.
+    id_correlacion = request.headers.get("X-Correlation-Id") or str(uuid.uuid4())
+    request.state.id_correlacion = id_correlacion
     inicio = time.perf_counter()
     respuesta = await call_next(request)
+    respuesta.headers["X-Correlation-Id"] = id_correlacion
     registrar(
         "peticion_http",
+        id_correlacion=id_correlacion,
         metodo=request.method,
         ruta=request.url.path,
         codigo=respuesta.status_code,
@@ -109,9 +132,10 @@ async def metrics():
     status_code=status.HTTP_202_ACCEPTED,
     response_model=RespuestaSincronizacion,
     summary="Recibir transacción financiera desde la cola de sincronización",
-    dependencies=[Depends(verificar_llave)],
+    dependencies=[Depends(verificar_llave), Depends(verificar_version_esquema)],
 )
-async def registrar_transaccion(transaccion: TransaccionDTO):
+async def registrar_transaccion(transaccion: TransaccionDTO, request: Request):
+    id_correlacion = request.state.id_correlacion
     TRANSACCIONES_RECIBIDAS.labels(origen_datos=transaccion.origen_datos.value).inc()
 
     previa = ultima_version.get(transaccion.id_transaccion)
@@ -120,7 +144,11 @@ async def registrar_transaccion(transaccion: TransaccionDTO):
     # no es un conflicto. Se responde igual que la primera vez y no cambia el estado.
     if previa is not None and transaccion.fecha_transaccion == previa:
         DUPLICADOS.inc()
-        registrar("reenvio_duplicado_ignorado", id_transaccion=transaccion.id_transaccion)
+        registrar(
+            "reenvio_duplicado_ignorado",
+            id_correlacion=id_correlacion,
+            id_transaccion=transaccion.id_transaccion,
+        )
         return RespuestaSincronizacion(
             estado="ACEPTADO",
             id_transaccion=transaccion.id_transaccion,
@@ -133,12 +161,14 @@ async def registrar_transaccion(transaccion: TransaccionDTO):
         CONFLICTOS_RESUELTOS.inc()
         registrar(
             "conflicto_resuelto_lww",
+            id_correlacion=id_correlacion,
             id_transaccion=transaccion.id_transaccion,
             gano="entrante" if transaccion.fecha_transaccion > previa else "existente",
         )
 
     registrar(
         "transaccion_recibida",
+        id_correlacion=id_correlacion,
         id_transaccion=transaccion.id_transaccion,
         origen_datos=transaccion.origen_datos.value,
     )

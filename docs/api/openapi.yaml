@@ -64,6 +64,9 @@ paths:
         Aplica validación estricta de esquemas y responde inmediatamente con un estado de aceptación
         para procesamiento en segundo plano (Eventual Consistency).
       operationId: registrarTransaccion
+      parameters:
+        - $ref: '#/components/parameters/IdCorrelacion'
+        - $ref: '#/components/parameters/VersionEsquema'
       requestBody:
         required: true
         content:
@@ -72,13 +75,30 @@ paths:
               $ref: '#/components/schemas/TransaccionDTO'
       responses:
         '202':
-          description: Transacción aceptada y encolada exitosamente.
+          description: >
+            Transacción aceptada. Un reenvío idéntico (mismo id_transaccion y misma
+            fecha_transaccion) devuelve la misma respuesta sin cambiar el estado (idempotente).
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/IdCorrelacion'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/RespuestaSincronizacion'
         '400':
-          description: Petición inválida (Error de formato o esquema del DTO)
+          description: >
+            Petición inválida o versión de esquema no soportada (X-Version-Esquema). Error
+            permanente: el cliente no reintenta y manda el mensaje a su cola de fallidos.
+        '401':
+          description: API key ausente o inválida. Error permanente para el cliente.
+        '422':
+          description: >
+            El cuerpo no cumple el contrato (falta un campo obligatorio, tipo incorrecto, monto <= 0).
+            Error permanente para el cliente.
+        '503':
+          description: >
+            Servicio no disponible (por ejemplo, Render despertando). Error recuperable: el
+            cliente reintenta con espera exponencial.
 
 components:
   securitySchemes:
@@ -87,9 +107,40 @@ components:
       in: header
       name: X-API-Key
 
+  parameters:
+    IdCorrelacion:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: >
+        Identificador del mensaje en la cola del dispositivo. No cambia entre reintentos y se
+        registra en cada línea de log del backend. Si no llega, el backend genera uno.
+      schema:
+        type: string
+        example: 345f6ac8-b24f-4259-b029-9ac4e33efa39
+    VersionEsquema:
+      name: X-Version-Esquema
+      in: header
+      required: false
+      description: >
+        Versión mayor del contrato del mensaje (docs/mensajes/README.md). Si se omite se asume 1.
+      schema:
+        type: string
+        enum: ['1']
+        default: '1'
+
+  headers:
+    IdCorrelacion:
+      description: El mismo X-Correlation-Id de la petición, o el generado por el backend.
+      schema:
+        type: string
+
   schemas:
     TransaccionDTO:
       type: object
+      description: >
+        Contrato v1 del mensaje transaccion.registrada. Los campos desconocidos se ignoran
+        (regla de compatibilidad hacia adelante, docs/mensajes/README.md).
       required:
         - id_transaccion
         - monto

@@ -1,0 +1,10 @@
+{
+  "id_transaccion": "3b1c7a52-9f0e-4d8a-b1e2-6c5d4e3f2a10",
+  "monto": 12000.0,
+  "moneda": "COP",
+  "comercio": "Droguería La Rebaja",
+  "categoria": "Salud",
+  "fecha_transaccion": "2026-09-30T11:00:00Z",
+  "origen_datos": "MANUAL",
+  "nota_usuario": "Campo opcional añadido en una v1.x: el consumidor v1 lo ignora"
+}

@@ -1,0 +1,9 @@
+{
+  "id_transaccion": "8f14e45f-ceea-467e-9e2a-abc123456789",
+  "monto": 45900.0,
+  "moneda": "COP",
+  "comercio": "Tienda Ara",
+  "categoria": "Supermercado",
+  "fecha_transaccion": "2026-09-30T10:15:00Z",
+  "origen_datos": "SMS_REGEX"
+}
