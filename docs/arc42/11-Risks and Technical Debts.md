@@ -5,7 +5,7 @@ Esta sección consolida los riesgos y deudas técnicas que ya quedaron documenta
 | Riesgo / Deuda técnica | Origen | Mitigación actual |
 | --- | --- | --- |
 | Complejidad adicional por el motor de resolución de conflictos (LWW), validación redundante y manejo de colas de sincronización | ADR-0001 | Asumida como costo necesario del enfoque Offline-First; se verifica con ESC-05 |
-| Vulnerabilidad ante *phishing* (SMS falsos procesados como compras reales) y mensajes que Regex no logra leer | ADR-0002 | Ninguna formalizada todavía — pendiente de definir cómo se detecta un SMS fraudulento |
+| Vulnerabilidad ante *phishing* (SMS falsos procesados como compras reales) y mensajes que Regex no logra leer | ADR-0002 | Decidida en la semana 13: validación del remitente por regla bancaria ([ADR-0016](../adr/0016-validacion-del-remitente-sms.md), amenaza AM-05). Se implementa con el `BroadcastReceiver` |
 | Necesidad de mantenimiento continuo si un banco cambia el formato de sus mensajes | ADR-0002 | Mitigado en parte por el registro de reglas modular (ver ESC-03); sigue siendo trabajo manual del equipo |
 | Incompatibilidad absoluta con dispositivos iOS | ADR-0003 | Aceptada como restricción permanente del alcance (RT-01), no hay mitigación planeada |
 | El sistema no soporta ataques avanzados a gran escala ni alta concurrencia masiva | ADR-0004 | Aceptada porque el alcance actual es solo grupos reducidos de prueba |
@@ -17,7 +17,7 @@ Esta sección consolida los riesgos y deudas técnicas que ya quedaron documenta
 | La cola de sincronización guarda en memoria y no tiene cliente HTTP, por lo que aún no envía transacciones al backend | `EVIDENCIA-S9.md` (H-3), `aspectos.md` (A-03) | Sin mitigación todavía. Ver MF-01, MF-02 y plan P-01 |
 | El backend guarda `ultima_version` solo en memoria: se pierde al reiniciar o cuando Render Free duerme el servicio | ADR-0011 | Aceptada para este corte; persistencia pendiente (A-02). Ver plan P-04 |
 | El payload de Android (`PayloadSincronizacionDTO`) no incluye `moneda`, `categoria` ni `origen_datos`, que el backend exige en `TransaccionDTO`: la primera sincronización real respondería 422 | `aspectos.md` (A-03) | Sin mitigación todavía; se alinea el contrato dentro del plan P-01 |
-| La llave de Gemini no tiene mecanismo de gestión definido | ADR-0012, ADR-0013 | Integración real aplazada; si la llave no puede protegerse en el cliente se dispara la reevaluación del [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md) |
+| La llave de Gemini no tiene mecanismo de gestión definido | ADR-0012, ADR-0013 | Integración real aplazada; si la llave no puede protegerse en el cliente se dispara la reevaluación del [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md). Amenaza AM-11; condición de entrada de P-03 ([ADR-0017](../adr/0017-frontera-de-datos-del-componente-generativo.md)) |
 
 ## 11.1 Modos de fallo de las integraciones
 
@@ -57,3 +57,29 @@ Cada pendiente de las tablas anteriores tiene un paso concreto, una semana objet
 | **P-03** | Cliente real de Gemini en `CategorizadorGemini` con corte de 5 s, 3 reintentos, «Sin Categorizar» al agotarlos y descarte de respuestas tardías; captura del fallo en `ProcesarNotificacionUseCase` | MF-04, MF-05, MF-06 | Semana 14, condicionada a resolver la llave ([ADR-0012](../adr/0012-aplazamiento-integracion-gemini.md), [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md)) | *Por asignar* | Prueba con un `ServicioCategorizacion` falso que lanza excepción o tarda más de 5 s: la transacción se guarda como «Sin Categorizar» |
 | **P-04** | Persistencia de `ultima_version` en el backend con clave única por `id_transaccion` | MF-03 tras reinicio | Semana 14 | *Por asignar* | Prueba: reiniciar la app de pruebas y reenviar la misma transacción no la cuenta como nueva |
 | **P-05** | Componente de reclasificación de transacciones «Sin Categorizar» | MF-05 | Semana 15 | *Por asignar* | Prueba: al volver el servicio, las transacciones «Sin Categorizar» reciben categoría |
+
+**Actualización semana 13.** P-01 y P-02 avanzaron en la semana 12 ([ADR-0014](../adr/0014-sincronizacion-asincrona-con-reintentos.md)): la cola tiene cliente HTTP (`TransporteHttpSincronizacion`), retira solo lo confirmado con 2xx, reintenta con espera exponencial y el payload ya incluye `moneda`, `categoria` y `origen_datos`. Sigue pendiente persistir la cola, que hoy vive en memoria (§8.9). Para eso se agregan los planes que salen del modelo de amenazas:
+
+| ID | Qué se implementa | Amenaza | Semana objetivo | Responsable | Cómo se verifica |
+|---|---|---|---|---|---|
+| **P-06** | Token por instalación (`POST /api/v1/dispositivos`, hash del token en el backend) | AM-01 (c), AM-17 | Semana 15, antes de publicar un APK con sincronización | Axel | Prueba: un token revocado responde 401; una escritura queda atribuida a su `id_dispositivo` |
+| **P-07** | Validación del remitente en `:parser` | AM-05 | Semana 14, con el `BroadcastReceiver` | Luis | Prueba: el mismo texto se acepta con el remitente del banco y se rechaza con otro número |
+| **P-08** | Pantalla de consentimiento informado antes de pedir `RECEIVE_SMS` | Privacidad (Ley 1581, art. 9) | Semana 14, con el `BroadcastReceiver` | Luis | Revisión manual: sin aceptar, no se pide el permiso ni se lee ningún SMS |
+| **P-09** | Supresión de los datos de un dispositivo en el backend | Privacidad (art. 8) | Semana 15, con P-04 y P-06 | Axel | Prueba: tras la supresión, el backend no conserva ninguna versión de ese dispositivo |
+
+P-03 (cliente real de Gemini) pasa a incluir los controles de [ADR-0017](../adr/0017-frontera-de-datos-del-componente-generativo.md), que cierran AM-09 y AM-10.
+
+## 11.4 Amenazas aceptadas y su motivo
+
+*Semana 13.* Viene del modelo STRIDE sobre el C2 ([`docs/seguridad/modelo-amenazas.md`](../seguridad/modelo-amenazas.md)). Una amenaza aceptada es un riesgo que el equipo decide asumir sabiendo lo que cuesta. Cada una tiene un disparador que obliga a revisarla.
+
+| Amenaza | Elemento del C2 | Riesgo (P × I) | Por qué se acepta | Se revisa si… |
+|---|---|---|---|---|
+| **AM-16** `/docs`, `/openapi.json` y `/metrics` públicos | API de sincronización | 3 × 1 = 3 | El contrato ya es público en el repositorio (`docs/api/openapi.yaml`). Las métricas son contadores sin datos personales. Esconderlos no protege nada y quita observabilidad (ADR-0010). | …una métrica empieza a llevar etiquetas con datos de usuario, o el repositorio pasa a ser privado. |
+| **AM-17** Una escritura no se puede atribuir a un dispositivo (repudio) | API de sincronización | 2 × 1 = 2 | Con la llave compartida no hay identidad por dispositivo. El `X-Correlation-Id` permite seguir una petición, y la llave solo la tiene el grupo de prueba. | …se publica un APK con sincronización (llega P-06). |
+| **AM-18** GitHub Actions referenciadas por etiqueta y no por hash | Pipeline (FC-4) | 1 × 2 = 2 | Son acciones oficiales (`actions/*`) y Dependabot vigila sus versiones. Fijar por hash complica las actualizaciones para un equipo de dos personas. | …se agrega una acción de un tercero que no sea `actions/*`. |
+| **Mientras rige ADR-0015 (opción B):** quien tenga una llave vigente escribe como cualquier dispositivo | Conector 4 | Parte de AM-01 | La llave no está en ningún APK publicado y se puede rotar y revocar. El daño máximo es alterar el estado LWW en memoria, que se reinicia con cada despliegue. | …una llave aparece fuera del grupo de prueba (se revoca ese mismo día) o se publica un APK con sincronización. |
+| **Suplantación del remitente del SMS en la red del operador** (residual de AM-05) | Conector 1 | 1 × 2 = 2 | La app no puede distinguir un SMS con el remitente falsificado por el operador. ADR-0016 cierra el caso común (un número cualquiera). | …se reporta un caso real con un banco del grupo de prueba. |
+| **El modelo elige una categoría válida pero equivocada a propósito** (residual de AM-09) | Conector 2 | 1 × 1 = 1 | La salida restringida al catálogo (ADR-0017) acota el daño a un reporte mal clasificado, que el usuario corrige. No expone datos. | …la tasa de correcciones manuales de un comercio supera el 20 %. |
+| **Transmisión internacional a Render (EE. UU.) y Google** sin contrato de transmisión firmado | Backend en Render, conector 2 | — (cumplimiento) | Proyecto académico con un grupo de prueba controlado; el backend solo conserva `id → fecha` en memoria y a Gemini solo va el comercio ([privacidad](../seguridad/privacidad.md)). | …antes de cualquier salida a producción o usuarios fuera del grupo de prueba. |
+| **No hay defensa contra ataques masivos** (DDoS, WAF) | API de sincronización | Ya registrada (ADR-0004) | El plan Free de Render no la ofrece y el alcance es un grupo reducido. AM-08 acota el costo de cada petición. | …el sistema sale del grupo de prueba. |

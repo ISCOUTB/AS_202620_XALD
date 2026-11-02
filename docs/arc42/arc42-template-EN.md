@@ -529,7 +529,7 @@ Con entrega "al menos una vez" y un receptor idempotente, el efecto neto es el d
 
 **Implementación.** `registrar_transaccion` en `backend/app/main.py` separa los dos casos: un reenvío idéntico responde 202 sin modificar `ultima_version` e incrementa `xald_sync_duplicados_total`; solo un conflicto real incrementa `xald_sync_conflictos_resueltos_total`. Lo verifican `test_mf03_reenvio_identico_es_idempotente_y_no_cuenta_como_conflicto` y `test_mf03_conflicto_real_sigue_contando_como_conflicto` en `backend/tests/test_lww.py` (modo de fallo MF-03, [Sección 11](11-Risks%20and%20Technical%20Debts.md)).
 
-**Lado del cliente (pendiente, plan P-02 de la Sección 11).** La cola debe retirar un elemento solo cuando recibe una respuesta 2xx. Hoy `obtenerSiguienteParaSincronizar()` no lo retira y la app aún no tiene cliente HTTP.
+**Lado del cliente (semana 12, [ADR-0014](../adr/0014-sincronizacion-asincrona-con-reintentos.md)).** La cola retira un mensaje solo con una respuesta 2xx, deduplica al encolar con la misma clave que el backend (`id_transaccion` + `fecha_transaccion`), reintenta con espera exponencial y aparta en una cola de fallidos lo que no se puede entregar. Cada mensaje lleva un `X-Correlation-Id` que el backend registra. Diseño completo: [`docs/mensajes/README.md`](../mensajes/README.md). Sigue pendiente persistir la cola y programar el envío con WorkManager ([límites](../mensajes/limites-del-experimento.md)).
 
 ### Saga: por qué no aplica
 
@@ -557,7 +557,7 @@ El modelo es Offline-First ([ADR-0001](../adr/0001-patron-offline-first.md)): el
 | **OP-01** | `InformacionFinanciera.guardarTransaccion(monto, comercio)` | **Fuerte local.** Escritura de efecto único por llamada: un monto no positivo se rechaza sin cambiar el estado, y lo guardado se ve de inmediato en las lecturas siguientes. | `XALDAPP/corefinanciero/src/main/java/com/proyecto/xald/corefinanciero/GestorCoreFinanciero.kt:13-24` | **Cumple en lo local.** Límites: guarda en memoria (línea 11), sin durabilidad ni cifrado hoy; sin control de concurrencia; y **no es idempotente**: cada llamada genera un `UUID` nuevo (línea 17), así que procesar dos veces el mismo SMS crea dos transacciones distintas. |
 | **OP-02** | `obtenerUltimaTransaccion()` | **Lectura de la propia escritura** (*read-your-writes*) dentro del dispositivo. | `GestorCoreFinanciero.kt:26-28` | **Cumple** en un mismo proceso (lee la misma lista que escribe OP-01). Sin prueba automatizada directa. |
 | **OP-03** | `obtenerPendientesSincronizacion()` | **Fuerte local.** Devuelve toda transacción local no confirmada (`sincronizado == false`) como `PayloadSincronizacionDTO`. | `GestorCoreFinanciero.kt:30-41` | **Cumple y verificada** por `XALDAPP/app/src/test/java/com/proyecto/xald/Cortevertical.kt:44-45` (tras guardar, hay 1 pendiente). Límite: nada marca `sincronizado = true`, así que la lista nunca se reduce (plan P-02). |
-| **OP-04** | `ColaSincronizacionService.encolarTransaccion(payload)` | **Entrega al menos una vez, orden FIFO local** (§8.5): el elemento se conserva hasta recibir una respuesta 2xx. | `XALDAPP/syncqueue/src/main/java/ColaSincronizacion.kt:13-15` y `21-23` | **Parcial.** Conserva el elemento (nunca lo retira), pero no deduplica por `idTransaccion`, guarda en memoria y no confirma envíos (plan P-02). |
+| **OP-04** | `ColaSincronizacionService.encolarTransaccion(payload)` | **Entrega al menos una vez, orden FIFO local** (§8.5): el elemento se conserva hasta recibir una respuesta 2xx. | `XALDAPP/syncqueue/src/main/java/ColaSincronizacion.kt` (`encolarTransaccion`, `procesarPendientes`) | **Cumple en memoria (semana 12).** Retira solo lo confirmado, deduplica por `idTransaccion@fechaTimestamp`, reintenta con backoff y tiene cola de fallidos; verificado por `ColaSincronizacionMensajesTest`. Límites: la cola vive en memoria y nada la procesa periódicamente todavía ([límites](../mensajes/limites-del-experimento.md)). |
 | **OP-05** | `ProcesarNotificacionUseCase.ejecutar(sms)` | **Orden «primero escribir en local, después encolar»:** el registro local ocurre antes de cualquier llamada externa y no se compensa si el encolado falla (la saga no aplica, §8.5). | `XALDAPP/app/src/main/java/ProcesarNotificacionUseCase.kt:26-37` | **Cumple el orden** (guardar en líneas 26-29, encolar en 32-37). Límites: ignora el resultado de `encolarTransaccion` y solo encola `pendientes.lastOrNull()` (línea 34); ninguna prueba lo invoca (el corte vertical repite los pasos a mano, hallazgo H-4 de `EVIDENCIA-S9.md`). |
 | **OP-06** | `POST /api/v1/transacciones` | **Eventual entre dispositivos, convergente por Last-Write-Wins e idempotente por `id_transaccion`:** un reenvío idéntico responde 202 sin cambios; ante un conflicto real gana la `fecha_transaccion` más reciente ([ADR-0011](../adr/0011-resolucion-conflictos-lww.md)); el resultado no depende del orden de llegada. `202` significa «aceptada», no «persistida». | `backend/app/main.py:137-179` (idempotencia 145-157; LWW 158-167) | **Cumple y verificada** (ver Verificación 1). Límites: `ultima_version` vive en memoria (línea 61) y se pierde al reiniciar o cuando Render duerme el servicio (plan P-04); «más reciente» depende del reloj del dispositivo. |
 | **OP-07** | `GET /metrics` | **Débil a propósito:** contadores monótonos por proceso; sin persistencia, se reinician con cada despliegue ([ADR-0010](../adr/0010-observabilidad.md)). | `backend/app/main.py:45-57` y `125-127` | **Cumple.** Sirve para observar, no para contabilizar. |
@@ -627,7 +627,29 @@ El sistema no usa un broker de mensajes (ni Kafka ni RabbitMQ; ver la nota de br
 * **Por qué no «como máximo una vez»:** perdería transacciones cada vez que se cae la red, lo que rompe ESC-05 (0 transacciones perdidas).
 * **Por qué no «exactamente una vez» a nivel de red:** exigiría coordinación transaccional entre el dispositivo y el backend, que no es posible con la red intermitente que asume Offline-First. Se obtiene el mismo efecto con al menos una vez más un receptor idempotente.
 * **Qué NO garantiza:** orden global entre transacciones distintas. Si el mismo payload llega dos veces, el contador `xald_transacciones_recibidas_total` sí lo cuenta dos veces (se incrementa en `main.py:139`, antes de la comprobación de idempotencia), aunque el dato no se duplica (MF-03, Sección 11).
-* **Estado:** el reenvío idempotente está implementado en el backend. Falta que la cola retire lo confirmado y que el cliente HTTP exista (Sección 11, MF-01, MF-03, planes P-01 y P-02).
+* **Estado:** el reenvío idempotente está implementado en el backend, y desde la semana 12 la cola del cliente retira solo lo confirmado, reintenta y tiene cliente HTTP (`TransporteHttpSincronizacion`). Falta persistir la cola (Sección 11, planes P-01 y P-02; ver [ADR-0014](../adr/0014-sincronizacion-asincrona-con-reintentos.md)).
+
+---
+
+## 8.10 Arquitectura de Seguridad
+
+*Semana 13.* La seguridad de XALD se organiza por **fronteras de confianza** del C2 ([`docs/c4/c2.md`](../c4/c2.md)). El modelado STRIDE completo, con probabilidad, impacto, dueño y estado de cada amenaza, está en [`docs/seguridad/modelo-amenazas.md`](../seguridad/modelo-amenazas.md). Las amenazas aceptadas y su motivo están en la Sección 11.4.
+
+| Frontera | Elemento del C2 | Control | Amenazas | Dónde está |
+|---|---|---|---|---|
+| **FC-1** Teléfono ↔ mundo (SMS) | Conector 1, `:parser` | Solo se procesa el SMS de un remitente bancario declarado en la regla del banco | AM-05 | [ADR-0016](../adr/0016-validacion-del-remitente-sms.md) — pendiente, con el `BroadcastReceiver` |
+| **FC-1** Teléfono ↔ mundo (almacenamiento) | BD local, almacén de la cola, caché | Cifrado AES-256 con SQLCipher y llave en Android Keystore; sin copia de seguridad en la nube ni transferencia a otro dispositivo | AM-02, AM-13 | [ADR-0004](../adr/0004-seguridad-y-cifrado.md); `allowBackup="false"` y `res/xml/*_rules.xml` (hecho) |
+| **FC-2** Dispositivo ↔ Gemini | Conector 2, `:aigemini`, caché de categorías | Frontera de datos mínima (solo el comercio), prompt fijo, salida validada contra un catálogo cerrado y caché que solo acepta salidas validadas | AM-06, AM-09, AM-10, AM-11 | [ADR-0017](../adr/0017-frontera-de-datos-del-componente-generativo.md) |
+| **FC-2 / FC-3** Dispositivo ↔ backend | Conector 4, API de sincronización | HTTPS obligatorio (`usesCleartextTraffic="false"`); `X-API-Key` comparada en tiempo constante; varias llaves vigentes para rotar; token por instalación antes de publicar | AM-01, AM-14, AM-17 | `verificar_llave` en `backend/app/main.py`; [ADR-0015](../adr/0015-autenticacion-del-cliente-movil.md) |
+| **FC-3** Backend ↔ Internet | API de sincronización, estado de versiones | Cuerpo limitado a 16 KB (413/411); fecha futura rechazada (422) para proteger el LWW; contenedor sin privilegios (`appuser`); dependencias sin vulnerabilidades conocidas | AM-04, AM-07, AM-08, AM-12, AM-15 | `backend/app/main.py`, `backend/tests/test_seguridad.py`, `backend/Dockerfile` |
+| **FC-4** Repositorio y pipeline | GitHub Actions → Render | Secretos solo en GitHub Secrets y Render; `.env` ignorado; barrido del historial; análisis de dependencias que bloquea el despliegue si hay un hallazgo sin decisión; Dependabot | AM-03, AM-04, AM-18 | `.github/workflows/ci.yml` (job `dependency-audit`), `.github/dependabot.yml`, [análisis de dependencias](../seguridad/analisis-dependencias.md) |
+
+**Principios que aplican en todo el sistema:**
+
+* **Minimización de datos.** El sistema no recolecta correo, nombre, teléfono, ubicación ni cuenta de Google. A Gemini solo viaja el comercio, y al backend no llega el texto del SMS. El detalle y la base legal están en [`docs/seguridad/privacidad.md`](../seguridad/privacidad.md).
+* **Nada de secretos en el código.** Llaves y hooks salen del entorno y ninguna llave del backend se compila en un APK publicado (ADR-0015).
+* **El peor caso es degradado, no inseguro.** Si falla la autenticación, el registro local sigue funcionando (ESC-01). Si falla o se manipula la IA, la transacción queda «Sin Categorizar» (ESC-02).
+* **Los logs no llevan datos financieros.** El backend registra `id_transaccion` y `X-Correlation-Id`, nunca monto, comercio ni categoría (ADR-0010).
 
 # Architecture Decisions
 
@@ -645,9 +667,13 @@ Las decisiones arquitectónicas del proyecto se registran como ADR (Architecture
 | [ADR-0008](../adr/0008-plataforma-de-despliegue.md) | Selección de Plataforma de Despliegue para el Backend XALD | Desplegar el Backend XALD como Web Service Docker en el plan Free de Render, definido como código en `render.yaml`, sin tarjeta de crédito. | RO-02 · RO-03 · Sección 7 (Deployment View) |
 | [ADR-0009](../adr/0009-distribucion-app.md) | Distribución de la Aplicación Móvil como APK Directo | Distribuir el APK generado por Gradle directamente vía GitHub Releases (sideloading), sin publicar en Google Play en este corte. | RO-01 · RO-02 · RO-03 · RT-01 |
 | [ADR-0010](../adr/0010-observabilidad.md) | Observabilidad con Logs JSON y Métricas Prometheus Embebidas | Exponer logs estructurados en JSON (stdout) y un endpoint `/metrics` en formato Prometheus dentro del propio backend, sin plataforma de monitoreo externa. | RO-02 · RO-03 · ESC-05 |
-| [ADR-0011](../adr/0011-resolucion-conflictos-lww.md) | Implementación de Resolución de Conflictos Last-Write-Wins (LWW) | El backend conserva la última versión por `id_transaccion` y resuelve los conflictos por fecha de transacción; los reenvíos idénticos se tratan de forma idempotente (§8.5). | RT-05 · ESC-05 · MF-03 |
+| [ADR-0011](../adr/0011-resolucion-conflictos-lww.md) | Resolución de Conflictos con Last-Write-Wins, UUID de Dispositivo y Timestamp del Cliente | El dispositivo genera el UUID y el backend conserva la versión con `fecha_transaccion` más reciente; es la decisión de datos más costosa de revertir (queda escrita en cada APK instalado). | RT-05 · ESC-05 · ADR-0001 |
 | [ADR-0012](../adr/0012-aplazamiento-integracion-gemini.md) | Aplazamiento de la Integración Real con la API de Gemini | Mantener `CategorizadorGemini` como *mock* detrás del contrato `ServicioCategorizacion` hasta definir cómo se protege la llave. | ESC-02 · MF-04 a MF-06 |
 | [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md) | Extraer o no extraer la integración con Gemini como servicio independiente | **No extraer** en este corte: `:aigemini` sigue en el monolito modular; se evaluaron explícitamente "no extraer" y "extraer al backend", con disparadores para reevaluar. | ADR-0006 · ADR-0007 · ESC-02 · Sección 11 |
+| [ADR-0014](../adr/0014-sincronizacion-asincrona-con-reintentos.md) | Sincronización asíncrona por cola local con reintentos, frente a envío síncrono | **Cola local asíncrona**: entrega al menos una vez, deduplicación en los dos extremos, backoff exponencial y cola de fallidos. El envío síncrono se descarta porque rompe ESC-01 (registrar sin conexión). | ADR-0001 · ADR-0011 · ESC-01 · ESC-05 · `docs/mensajes/` |
+| [ADR-0015](../adr/0015-autenticacion-del-cliente-movil.md) | Autenticación del cliente móvil: llaves rotables ahora, token por instalación antes de publicar | El backend acepta varias llaves vigentes (`XALD_API_KEYS`) para rotar y revocar; ninguna llave se compila en un APK publicado; token propio por instalación antes de activar la sincronización en un APK distribuido. | AM-01 (riesgo 9) · AM-17 · ADR-0004 · ADR-0009 |
+| [ADR-0016](../adr/0016-validacion-del-remitente-sms.md) | Validación del remitente del SMS en el registro de reglas de `:parser` | Cada regla bancaria declara sus remitentes; un SMS de otro número no crea transacciones. Cambia el contrato `parsear(remitente, mensajeCrudo)`. | AM-05 · ADR-0002 · ESC-03 |
+| [ADR-0017](../adr/0017-frontera-de-datos-del-componente-generativo.md) | Frontera de datos y validación de salida del componente generativo (Gemini) | Solo el comercio viaja a Gemini; prompt fijo; la salida se acepta solo si está en el catálogo cerrado; la caché solo guarda salidas validadas. | AM-06 · AM-09 · AM-10 · AM-11 · ADR-0012 · ADR-0013 |
 
 # Quality Requirements
 
@@ -764,7 +790,7 @@ Esta sección consolida los riesgos y deudas técnicas que ya quedaron documenta
 | Riesgo / Deuda técnica | Origen | Mitigación actual |
 | --- | --- | --- |
 | Complejidad adicional por el motor de resolución de conflictos (LWW), validación redundante y manejo de colas de sincronización | ADR-0001 | Asumida como costo necesario del enfoque Offline-First; se verifica con ESC-05 |
-| Vulnerabilidad ante *phishing* (SMS falsos procesados como compras reales) y mensajes que Regex no logra leer | ADR-0002 | Ninguna formalizada todavía — pendiente de definir cómo se detecta un SMS fraudulento |
+| Vulnerabilidad ante *phishing* (SMS falsos procesados como compras reales) y mensajes que Regex no logra leer | ADR-0002 | Decidida en la semana 13: validación del remitente por regla bancaria ([ADR-0016](../adr/0016-validacion-del-remitente-sms.md), amenaza AM-05). Se implementa con el `BroadcastReceiver` |
 | Necesidad de mantenimiento continuo si un banco cambia el formato de sus mensajes | ADR-0002 | Mitigado en parte por el registro de reglas modular (ver ESC-03); sigue siendo trabajo manual del equipo |
 | Incompatibilidad absoluta con dispositivos iOS | ADR-0003 | Aceptada como restricción permanente del alcance (RT-01), no hay mitigación planeada |
 | El sistema no soporta ataques avanzados a gran escala ni alta concurrencia masiva | ADR-0004 | Aceptada porque el alcance actual es solo grupos reducidos de prueba |
@@ -776,7 +802,7 @@ Esta sección consolida los riesgos y deudas técnicas que ya quedaron documenta
 | La cola de sincronización guarda en memoria y no tiene cliente HTTP, por lo que aún no envía transacciones al backend | `EVIDENCIA-S9.md` (H-3), `aspectos.md` (A-03) | Sin mitigación todavía. Ver MF-01, MF-02 y plan P-01 |
 | El backend guarda `ultima_version` solo en memoria: se pierde al reiniciar o cuando Render Free duerme el servicio | ADR-0011 | Aceptada para este corte; persistencia pendiente (A-02). Ver plan P-04 |
 | El payload de Android (`PayloadSincronizacionDTO`) no incluye `moneda`, `categoria` ni `origen_datos`, que el backend exige en `TransaccionDTO`: la primera sincronización real respondería 422 | `aspectos.md` (A-03) | Sin mitigación todavía; se alinea el contrato dentro del plan P-01 |
-| La llave de Gemini no tiene mecanismo de gestión definido | ADR-0012, ADR-0013 | Integración real aplazada; si la llave no puede protegerse en el cliente se dispara la reevaluación del [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md) |
+| La llave de Gemini no tiene mecanismo de gestión definido | ADR-0012, ADR-0013 | Integración real aplazada; si la llave no puede protegerse en el cliente se dispara la reevaluación del [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md). Amenaza AM-11; condición de entrada de P-03 ([ADR-0017](../adr/0017-frontera-de-datos-del-componente-generativo.md)) |
 
 ## 11.1 Modos de fallo de las integraciones
 
@@ -816,6 +842,32 @@ Cada pendiente de las tablas anteriores tiene un paso concreto, una semana objet
 | **P-03** | Cliente real de Gemini en `CategorizadorGemini` con corte de 5 s, 3 reintentos, «Sin Categorizar» al agotarlos y descarte de respuestas tardías; captura del fallo en `ProcesarNotificacionUseCase` | MF-04, MF-05, MF-06 | Semana 14, condicionada a resolver la llave ([ADR-0012](../adr/0012-aplazamiento-integracion-gemini.md), [ADR-0013](../adr/0013-extraer-o-no-integracion-gemini.md)) | *Por asignar* | Prueba con un `ServicioCategorizacion` falso que lanza excepción o tarda más de 5 s: la transacción se guarda como «Sin Categorizar» |
 | **P-04** | Persistencia de `ultima_version` en el backend con clave única por `id_transaccion` | MF-03 tras reinicio | Semana 14 | *Por asignar* | Prueba: reiniciar la app de pruebas y reenviar la misma transacción no la cuenta como nueva |
 | **P-05** | Componente de reclasificación de transacciones «Sin Categorizar» | MF-05 | Semana 15 | *Por asignar* | Prueba: al volver el servicio, las transacciones «Sin Categorizar» reciben categoría |
+
+**Actualización semana 13.** P-01 y P-02 avanzaron en la semana 12 ([ADR-0014](../adr/0014-sincronizacion-asincrona-con-reintentos.md)): la cola tiene cliente HTTP (`TransporteHttpSincronizacion`), retira solo lo confirmado con 2xx, reintenta con espera exponencial y el payload ya incluye `moneda`, `categoria` y `origen_datos`. Sigue pendiente persistir la cola, que hoy vive en memoria (§8.9). Para eso se agregan los planes que salen del modelo de amenazas:
+
+| ID | Qué se implementa | Amenaza | Semana objetivo | Responsable | Cómo se verifica |
+|---|---|---|---|---|---|
+| **P-06** | Token por instalación (`POST /api/v1/dispositivos`, hash del token en el backend) | AM-01 (c), AM-17 | Semana 15, antes de publicar un APK con sincronización | Axel | Prueba: un token revocado responde 401; una escritura queda atribuida a su `id_dispositivo` |
+| **P-07** | Validación del remitente en `:parser` | AM-05 | Semana 14, con el `BroadcastReceiver` | Luis | Prueba: el mismo texto se acepta con el remitente del banco y se rechaza con otro número |
+| **P-08** | Pantalla de consentimiento informado antes de pedir `RECEIVE_SMS` | Privacidad (Ley 1581, art. 9) | Semana 14, con el `BroadcastReceiver` | Luis | Revisión manual: sin aceptar, no se pide el permiso ni se lee ningún SMS |
+| **P-09** | Supresión de los datos de un dispositivo en el backend | Privacidad (art. 8) | Semana 15, con P-04 y P-06 | Axel | Prueba: tras la supresión, el backend no conserva ninguna versión de ese dispositivo |
+
+P-03 (cliente real de Gemini) pasa a incluir los controles de [ADR-0017](../adr/0017-frontera-de-datos-del-componente-generativo.md), que cierran AM-09 y AM-10.
+
+## 11.4 Amenazas aceptadas y su motivo
+
+*Semana 13.* Viene del modelo STRIDE sobre el C2 ([`docs/seguridad/modelo-amenazas.md`](../seguridad/modelo-amenazas.md)). Una amenaza aceptada es un riesgo que el equipo decide asumir sabiendo lo que cuesta. Cada una tiene un disparador que obliga a revisarla.
+
+| Amenaza | Elemento del C2 | Riesgo (P × I) | Por qué se acepta | Se revisa si… |
+|---|---|---|---|---|
+| **AM-16** `/docs`, `/openapi.json` y `/metrics` públicos | API de sincronización | 3 × 1 = 3 | El contrato ya es público en el repositorio (`docs/api/openapi.yaml`). Las métricas son contadores sin datos personales. Esconderlos no protege nada y quita observabilidad (ADR-0010). | …una métrica empieza a llevar etiquetas con datos de usuario, o el repositorio pasa a ser privado. |
+| **AM-17** Una escritura no se puede atribuir a un dispositivo (repudio) | API de sincronización | 2 × 1 = 2 | Con la llave compartida no hay identidad por dispositivo. El `X-Correlation-Id` permite seguir una petición, y la llave solo la tiene el grupo de prueba. | …se publica un APK con sincronización (llega P-06). |
+| **AM-18** GitHub Actions referenciadas por etiqueta y no por hash | Pipeline (FC-4) | 1 × 2 = 2 | Son acciones oficiales (`actions/*`) y Dependabot vigila sus versiones. Fijar por hash complica las actualizaciones para un equipo de dos personas. | …se agrega una acción de un tercero que no sea `actions/*`. |
+| **Mientras rige ADR-0015 (opción B):** quien tenga una llave vigente escribe como cualquier dispositivo | Conector 4 | Parte de AM-01 | La llave no está en ningún APK publicado y se puede rotar y revocar. El daño máximo es alterar el estado LWW en memoria, que se reinicia con cada despliegue. | …una llave aparece fuera del grupo de prueba (se revoca ese mismo día) o se publica un APK con sincronización. |
+| **Suplantación del remitente del SMS en la red del operador** (residual de AM-05) | Conector 1 | 1 × 2 = 2 | La app no puede distinguir un SMS con el remitente falsificado por el operador. ADR-0016 cierra el caso común (un número cualquiera). | …se reporta un caso real con un banco del grupo de prueba. |
+| **El modelo elige una categoría válida pero equivocada a propósito** (residual de AM-09) | Conector 2 | 1 × 1 = 1 | La salida restringida al catálogo (ADR-0017) acota el daño a un reporte mal clasificado, que el usuario corrige. No expone datos. | …la tasa de correcciones manuales de un comercio supera el 20 %. |
+| **Transmisión internacional a Render (EE. UU.) y Google** sin contrato de transmisión firmado | Backend en Render, conector 2 | — (cumplimiento) | Proyecto académico con un grupo de prueba controlado; el backend solo conserva `id → fecha` en memoria y a Gemini solo va el comercio ([privacidad](../seguridad/privacidad.md)). | …antes de cualquier salida a producción o usuarios fuera del grupo de prueba. |
+| **No hay defensa contra ataques masivos** (DDoS, WAF) | API de sincronización | Ya registrada (ADR-0004) | El plan Free de Render no la ofrece y el alcance es un grupo reducido. AM-08 acota el costo de cada petición. | …el sistema sale del grupo de prueba. |
 
 # Glossary
 
