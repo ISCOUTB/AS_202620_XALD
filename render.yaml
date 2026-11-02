@@ -10,5 +10,8 @@ services:
     envVars:
       - key: XALD_API_KEY
         sync: false
+      # Rotación de llaves (ADR-0015): lista separada por comas de llaves vigentes.
+      - key: XALD_API_KEYS
+        sync: false
       - key: LOG_LEVEL
         value: INFO

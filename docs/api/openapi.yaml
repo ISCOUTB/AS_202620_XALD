@@ -91,9 +91,18 @@ paths:
             permanente: el cliente no reintenta y manda el mensaje a su cola de fallidos.
         '401':
           description: API key ausente o inválida. Error permanente para el cliente.
+        '411':
+          description: >
+            Falta la cabecera Content-Length (amenaza AM-08, docs/seguridad/modelo-amenazas.md).
+            Error permanente para el cliente.
+        '413':
+          description: >
+            Cuerpo mayor a 16 KB (amenaza AM-08). Una transacción válida ocupa menos de 1 KB.
+            Error permanente para el cliente.
         '422':
           description: >
-            El cuerpo no cumple el contrato (falta un campo obligatorio, tipo incorrecto, monto <= 0).
+            El cuerpo no cumple el contrato (falta un campo obligatorio, tipo incorrecto, monto <= 0)
+            o fecha_transaccion está más de 5 minutos en el futuro (amenaza AM-07).
             Error permanente para el cliente.
         '503':
           description: >

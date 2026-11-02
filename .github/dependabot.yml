@@ -1,0 +1,26 @@
+# Semana 13 — análisis de dependencias continuo (docs/seguridad/analisis-dependencias.md).
+# Complementa el job dependency-audit del CI: Dependabot abre un PR cuando sale una
+# versión nueva de una dependencia; el job verifica las vulnerabilidades en cada push.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "gradle"
+    directory: "/XALDAPP"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
