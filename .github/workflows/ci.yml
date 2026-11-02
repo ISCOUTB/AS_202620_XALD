@@ -52,11 +52,12 @@ jobs:
         # Declaramos las dependencias aquí mismo para que SonarQube las valide directamente y deje de pedir el bloqueo.
         run: |
           pip install --no-cache-dir --only-binary :all: \
-            fastapi==0.115.0 \
+            fastapi==0.162.0 \
             httpx==0.27.0 \
             prometheus-client==0.20.0 \
             pydantic==2.9.0 \
-            pytest==8.3.0 \
+            pytest==9.0.3 \
+            starlette==1.3.1 \
             "uvicorn[standard]==0.30.0"
         working-directory: backend
 
@@ -64,8 +65,71 @@ jobs:
         run: python -m pytest tests/ -v
         working-directory: backend
 
+  # Semana 13 — análisis de dependencias (docs/seguridad/analisis-dependencias.md).
+  # Cada hallazgo debe tener decisión en docs/seguridad/hallazgos-dependencias.json;
+  # uno nuevo sin decisión hace fallar el job y bloquea el despliegue.
+  dependency-audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar entorno Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar las dependencias del backend y pip-audit
+        run: |
+          python -m venv /tmp/backend-env
+          /tmp/backend-env/bin/pip install --no-cache-dir --only-binary :all: \
+            fastapi==0.162.0 \
+            httpx==0.27.0 \
+            prometheus-client==0.20.0 \
+            pydantic==2.9.0 \
+            pytest==9.0.3 \
+            starlette==1.3.1 \
+            "uvicorn[standard]==0.30.0"
+          pip install --no-cache-dir pip-audit==2.10.1
+
+      - name: pip-audit sobre el entorno del backend (incluye transitivas)
+        run: |
+          pip-audit --path /tmp/backend-env/lib/python3.12/site-packages -f json -o pip-audit.json || true
+          test -s pip-audit.json
+
+      - name: Revisar hallazgos del backend contra las decisiones del equipo
+        run: python scripts/seguridad/auditar_dependencias.py backend pip-audit.json
+
+      - name: Configurar entorno Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Resolver el árbol de dependencias de cada módulo Android
+        working-directory: XALDAPP
+        run: |
+          chmod +x gradlew
+          for modulo in app parser corefinanciero syncqueue aigemini; do
+            ./gradlew -q ":$modulo:dependencies" --configuration releaseRuntimeClasspath > "../arbol-$modulo.txt"
+          done
+
+      - name: Consultar OSV.dev con las dependencias Android y revisar hallazgos
+        run: python scripts/seguridad/auditar_dependencias.py android arbol-*.txt
+
+      - name: Guardar los reportes del análisis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: analisis-dependencias
+          path: |
+            pip-audit.json
+            arbol-*.txt
+
   deploy-backend:
-    needs: [build-and-test, backend-tests]
+    needs: [build-and-test, backend-tests, dependency-audit]
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
 
