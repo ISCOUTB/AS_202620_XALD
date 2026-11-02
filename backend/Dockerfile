@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Fusión de comandos (resuelve "Merge this RUN...") y orden alfabético (resuelve "Sort these package names...")
 RUN adduser --disabled-password --gecos "" appuser && \
-    pip install --no-cache-dir --upgrade pip==26.2.2 && \
+    pip install --no-cache-dir --only-binary :all: --upgrade pip==26.2.2 && \
     pip install --no-cache-dir --only-binary :all: \
     fastapi==0.162.0 \
     httpx==0.27.0 \
