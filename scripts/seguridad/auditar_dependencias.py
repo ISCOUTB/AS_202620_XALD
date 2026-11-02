@@ -11,15 +11,17 @@ Cada hallazgo se busca en docs/seguridad/hallazgos-dependencias.json. Si un hall
 tiene decisión registrada ("corregido" o "aceptado" con motivo), el job falla: un hallazgo
 nuevo no puede pasar sin que alguien del equipo lo revise.
 
-Uso:
-  python scripts/seguridad/auditar_dependencias.py backend pip-audit.json
-  python scripts/seguridad/auditar_dependencias.py android arbol-app.txt arbol-parser.txt ...
+Uso (desde la raíz del repositorio, donde el CI deja los reportes):
+  python scripts/seguridad/auditar_dependencias.py backend    # lee pip-audit.json
+  python scripts/seguridad/auditar_dependencias.py android    # lee arbol-*.txt
+
+Los nombres de los reportes son fijos y se buscan solo dentro del repositorio: el script no
+recibe rutas por argumento (evita path traversal, regla de SonarCloud).
 
 Solo usa la biblioteca estándar (mismo criterio que backend/scripts/medir_esc05.py).
 """
 import json
 import os
-import re
 import sys
 import urllib.request
 from pathlib import Path
@@ -27,11 +29,9 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parents[2]
 DECISIONES = RAIZ / "docs" / "seguridad" / "hallazgos-dependencias.json"
 OSV_LOTE = "https://api.osv.dev/v1/querybatch"
-
-# Línea de `gradle dependencies`:  +--- androidx.core:core-ktx:1.10.1 -> 1.13.0 (*)
-LINEA_GRADLE = re.compile(
-    r"^[\s|\\+-]*([A-Za-z0-9_.\-]+):([A-Za-z0-9_.\-]+):([^\s:]+)(?:\s*->\s*([^\s(]+))?"
-)
+REPORTE_PIP = RAIZ / "pip-audit.json"
+PATRON_ARBOLES = "arbol-*.txt"
+CARACTERES_COORDENADA = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
 
 
 def cargar_decisiones():
@@ -41,22 +41,36 @@ def cargar_decisiones():
     return {d["id"]: d for d in datos.get("decisiones", [])}
 
 
-def coordenadas_gradle(rutas):
-    """Devuelve el conjunto de (grupo:artefacto, versión resuelta) de los árboles de Gradle."""
+def coordenada_de_linea(linea):
+    """Extrae (grupo:artefacto, versión resuelta) de una línea de `gradle dependencies`.
+
+    Ejemplos:  +--- androidx.core:core-ktx:1.10.1 -> 1.13.0 (*)
+               |    \\--- androidx.compose.ui:ui -> 1.8.0        (versión puesta por el BOM)
+    """
+    if "project :" in linea:
+        return None  # dependencia entre módulos del propio repo
+    texto = linea.lstrip(" |\\+-")
+    izquierda, _, derecha = texto.partition(" -> ")
+    partes = izquierda.split(" ")[0].split(":")
+    if len(partes) < 2 or not set(partes[0] + partes[1]) <= CARACTERES_COORDENADA:
+        return None
+    if derecha:
+        version = derecha.split(" ")[0]
+    else:
+        version = partes[2] if len(partes) > 2 else ""
+    if not version or version.startswith("{") or version == "FAILED":
+        return None
+    return f"{partes[0]}:{partes[1]}", version
+
+
+def coordenadas_gradle():
+    """Conjunto de dependencias Maven resueltas en los árboles arbol-*.txt de la raíz del repo."""
     encontradas = set()
-    for ruta in rutas:
-        for linea in Path(ruta).read_text(encoding="utf-8", errors="replace").splitlines():
-            if "project :" in linea:
-                continue  # dependencia entre módulos del propio repo
-            m = LINEA_GRADLE.match(linea)
-            if not m:
-                continue
-            grupo, artefacto, version, resuelta = m.groups()
-            flecha = re.search(r"->\s*([^\s(]+)", linea)
-            version = resuelta or (flecha.group(1) if flecha else version)
-            if version in ("{strictly", "FAILED") or version.startswith("{"):
-                continue
-            encontradas.add((f"{grupo}:{artefacto}", version))
+    for ruta in sorted(RAIZ.glob(PATRON_ARBOLES)):
+        for linea in ruta.read_text(encoding="utf-8", errors="replace").splitlines():
+            coordenada = coordenada_de_linea(linea)
+            if coordenada:
+                encontradas.add(coordenada)
     return sorted(encontradas)
 
 
@@ -76,8 +90,8 @@ def consultar_osv(coordenadas):
     return hallazgos
 
 
-def hallazgos_pip(ruta_json):
-    datos = json.loads(Path(ruta_json).read_text(encoding="utf-8"))
+def hallazgos_pip():
+    datos = json.loads(REPORTE_PIP.read_text(encoding="utf-8"))
     hallazgos, vistos = [], set()
     for dep in datos.get("dependencies", []):
         for vuln in dep.get("vulns", []):
@@ -125,15 +139,15 @@ def decidir(hallazgos, decisiones, origen):
 
 
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("backend", "android"):
+    if len(argv) != 2 or argv[1] not in ("backend", "android"):
         print(__doc__)
         return 2
     decisiones = cargar_decisiones()
     if argv[1] == "backend":
-        hallazgos = hallazgos_pip(argv[2])
+        hallazgos = hallazgos_pip()
         origen = "backend (pip-audit)"
     else:
-        coordenadas = coordenadas_gradle(argv[2:])
+        coordenadas = coordenadas_gradle()
         print(f"{len(coordenadas)} dependencias Maven resueltas en los módulos Android.")
         hallazgos = consultar_osv(coordenadas)
         origen = "Android (Gradle + OSV.dev)"
