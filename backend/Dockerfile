@@ -8,10 +8,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Fusión de comandos (resuelve "Merge this RUN...") y orden alfabético (resuelve "Sort these package names...")
 RUN adduser --disabled-password --gecos "" appuser && \
     pip install --no-cache-dir --only-binary :all: \
-    fastapi==0.115.0 \
+    fastapi==0.162.0 \
     httpx==0.27.0 \
     prometheus-client==0.20.0 \
     pydantic==2.9.0 \
+    starlette==1.3.1 \
     "uvicorn[standard]==0.30.0"
 
 COPY app ./app
