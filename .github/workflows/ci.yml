@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configurar entorno Java JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
           java-version: '17'
@@ -104,7 +104,7 @@ jobs:
         run: python scripts/seguridad/auditar_dependencias.py backend
 
       - name: Configurar entorno Java JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
           java-version: '17'
