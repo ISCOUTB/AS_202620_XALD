@@ -55,7 +55,7 @@ explícitamente en 1.3.1 y pytest 8.3.0 → 9.0.3. Se cambió en los cuatro luga
 | Run | Commit | Resultado | Qué pasó |
 |---|---|---|---|
 | [41373988671](https://github.com/ISCOUTB/AS_202620_XALD/actions/runs/41373988671) | `c0aa731` (PR #27) | **Falló, y era lo esperado** | `pip-audit` encontró **6 vulnerabilidades en `pip` 25.0.1**, el pip que trae el entorno virtual y también la imagen `python:3.12-slim` del backend. No tenían decisión registrada, así que el job falló y `deploy-backend` no corrió. La revisión local no las vio porque el Python 3.13 de la máquina de desarrollo trae un pip más nuevo. |
-| *Run del commit con la corrección (ver PR #27)* | | Se espera verde | `pip` actualizado a 26.2.2 en el CI y en el `Dockerfile`; las 6 quedan como `corregido`. |
+| [41374429361](https://github.com/ISCOUTB/AS_202620_XALD/actions/runs/41374429361) | `fda2f16` (PR #27) | **Verde** | Con `pip` 26.2.2 en el CI y en el `Dockerfile`: backend sin vulnerabilidades conocidas (32 paquetes, con transitivas) y **151 dependencias Maven** resueltas en los cinco módulos Android, todas sin vulnerabilidades en OSV.dev. Las 6 de pip quedan como `corregido`. |
 
 **Hallazgos encontrados por el pipeline y decisión:**
 
