@@ -84,7 +84,7 @@ jobs:
         run: |
           python -m venv /tmp/backend-env
           # El pip que trae el venv (25.0.1) tiene 6 vulnerabilidades: hallazgo de este mismo job.
-          /tmp/backend-env/bin/pip install --no-cache-dir --upgrade pip==26.2.2
+          /tmp/backend-env/bin/pip install --no-cache-dir --only-binary :all: --upgrade pip==26.2.2
           /tmp/backend-env/bin/pip install --no-cache-dir --only-binary :all: \
             fastapi==0.162.0 \
             httpx==0.27.0 \
@@ -93,7 +93,7 @@ jobs:
             pytest==9.0.3 \
             starlette==1.3.1 \
             "uvicorn[standard]==0.30.0"
-          pip install --no-cache-dir pip-audit==2.10.1
+          pip install --no-cache-dir --only-binary :all: pip-audit==2.10.1
 
       - name: pip-audit sobre el entorno del backend (incluye transitivas)
         run: |
@@ -101,7 +101,7 @@ jobs:
           test -s pip-audit.json
 
       - name: Revisar hallazgos del backend contra las decisiones del equipo
-        run: python scripts/seguridad/auditar_dependencias.py backend pip-audit.json
+        run: python scripts/seguridad/auditar_dependencias.py backend
 
       - name: Configurar entorno Java JDK 17
         uses: actions/setup-java@v4
@@ -119,7 +119,7 @@ jobs:
           done
 
       - name: Consultar OSV.dev con las dependencias Android y revisar hallazgos
-        run: python scripts/seguridad/auditar_dependencias.py android arbol-*.txt
+        run: python scripts/seguridad/auditar_dependencias.py android
 
       - name: Guardar los reportes del análisis
         if: always()
