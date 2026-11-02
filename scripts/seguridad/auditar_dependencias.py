@@ -78,9 +78,13 @@ def consultar_osv(coordenadas):
 
 def hallazgos_pip(ruta_json):
     datos = json.loads(Path(ruta_json).read_text(encoding="utf-8"))
-    hallazgos = []
+    hallazgos, vistos = [], set()
     for dep in datos.get("dependencies", []):
         for vuln in dep.get("vulns", []):
+            # pip-audit puede repetir un registro (una vez por cada fuente); se cuenta una sola vez.
+            if (dep["name"], dep["version"], vuln["id"]) in vistos:
+                continue
+            vistos.add((dep["name"], dep["version"], vuln["id"]))
             hallazgos.append({
                 "paquete": dep["name"],
                 "version": dep["version"],
