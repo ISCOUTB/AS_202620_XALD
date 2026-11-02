@@ -52,9 +52,24 @@ explícitamente en 1.3.1 y pytest 8.3.0 → 9.0.3. Se cambió en los cuatro luga
 
 ## 3. Ejecución en el pipeline
 
-| Run | Commit | Resultado backend | Resultado Android |
+| Run | Commit | Resultado | Qué pasó |
 |---|---|---|---|
-| *Se completa con la URL del run de GitHub Actions del commit de la semana 13* | | | |
+| [41373988671](https://github.com/ISCOUTB/AS_202620_XALD/actions/runs/41373988671) | `c0aa731` (PR #27) | **Falló, y era lo esperado** | `pip-audit` encontró **6 vulnerabilidades en `pip` 25.0.1**, el pip que trae el entorno virtual y también la imagen `python:3.12-slim` del backend. No tenían decisión registrada, así que el job falló y `deploy-backend` no corrió. La revisión local no las vio porque el Python 3.13 de la máquina de desarrollo trae un pip más nuevo. |
+| *Run del commit con la corrección (ver PR #27)* | | Se espera verde | `pip` actualizado a 26.2.2 en el CI y en el `Dockerfile`; las 6 quedan como `corregido`. |
+
+**Hallazgos encontrados por el pipeline y decisión:**
+
+| Paquete | Versión | Vulnerabilidad | Qué permite | ¿Nos afecta? | Decisión | Corregida en |
+|---|---|---|---|---|---|---|
+| pip | 25.0.1 | PYSEC-2026-1795 / CVE-2025-8869 | Enlaces simbólicos fuera del directorio al extraer un tar | En la imagen, solo si alguien instala paquetes dentro del contenedor | **Corregido** | 26.2.2 |
+| pip | 25.0.1 | PYSEC-2026-1796 / CVE-2026-1703 | *Path traversal* al extraer un wheel malicioso | Igual | **Corregido** | 26.2.2 |
+| pip | 25.0.1 | PYSEC-2026-2875 / CVE-2026-3219 | Confusión entre archivos tar y ZIP concatenados | Igual | **Corregido** | 26.2.2 |
+| pip | 25.0.1 | PYSEC-2026-2876 / CVE-2026-6357 | La comprobación de actualización importa módulos después de instalar | Igual | **Corregido** | 26.2.2 |
+| pip | 25.0.1 | PYSEC-2026-196 / CVE-2026-8643 | `console_scripts` resueltos fuera del directorio de instalación | Igual | **Corregido** | 26.2.2 |
+| pip | 25.0.1 | PYSEC-2026-3721 / CVE-2026-13346 | URLs doblemente codificadas instalan archivos en rutas arbitrarias | Sí, durante el `docker build`, que instala desde PyPI | **Corregido** | 26.2.2 |
+
+El script también se ajustó para contar una sola vez cada hallazgo: `pip-audit` repetía algunos
+registros, una vez por cada fuente.
 
 Si el job reporta hallazgos en la app Android, cada uno se agrega a `hallazgos-dependencias.json` con su
-decisión y a la tabla de la §2.
+decisión y a esta tabla.
