@@ -83,3 +83,19 @@ P-03 (cliente real de Gemini) pasa a incluir los controles de [ADR-0017](../adr/
 | **El modelo elige una categoría válida pero equivocada a propósito** (residual de AM-09) | Conector 2 | 1 × 1 = 1 | La salida restringida al catálogo (ADR-0017) acota el daño a un reporte mal clasificado, que el usuario corrige. No expone datos. | …la tasa de correcciones manuales de un comercio supera el 20 %. |
 | **Transmisión internacional a Render (EE. UU.) y Google** sin contrato de transmisión firmado | Backend en Render, conector 2 | — (cumplimiento) | Proyecto académico con un grupo de prueba controlado; el backend solo conserva `id → fecha` en memoria y a Gemini solo va el comercio ([privacidad](../seguridad/privacidad.md)). | …antes de cualquier salida a producción o usuarios fuera del grupo de prueba. |
 | **No hay defensa contra ataques masivos** (DDoS, WAF) | API de sincronización | Ya registrada (ADR-0004) | El plan Free de Render no la ofrece y el alcance es un grupo reducido. AM-08 acota el costo de cada petición. | …el sistema sale del grupo de prueba. |
+
+
+## 11.5 Señalamientos de los pares
+
+Lo que señalaron los pares sobre esta entrega, con su estado. Cada fila lleva un ID y el cambio de estado se hace en un commit cuyo mensaje incluye ese ID (por ejemplo `docs: SP-02 corregido`), de modo que el historial de este archivo muestra cuándo se atendió cada uno.
+
+**Estados:**
+* **Corregido:** se cambió algo en el repositorio y la fila apunta a la evidencia.
+* **Asumido:** no se corrige y se explica por qué.
+* **Pendiente:** se reconoce y todavía no se atiende; lleva semana objetivo.
+
+| ID | Quién lo señaló | Qué señaló | Estado | Qué se hizo o por qué se asume | Evidencia |
+|---|---|---|---|---|---|
+| SP-01 | [completar] | [completar: el comentario, tal cual] | [Corregido / Asumido / Pendiente] | [completar] | [completar: archivo o commit] |
+| SP-02 | [completar] | [completar] | [completar] | [completar] | [completar] |
+| SP-03 | [completar] | [completar] | [completar] | [completar] | [completar] |
