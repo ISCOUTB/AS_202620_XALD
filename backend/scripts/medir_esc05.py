@@ -56,7 +56,7 @@ def main():
         sys.exit("Falta la variable de entorno XALD_API_KEY.")
     urllib.request.urlopen(f"{URL}/health", timeout=120).read()  # despierta el servicio si estaba dormido
     antes = contador()
-    base = datetime.now(timezone.utc)
+    base = datetime.now(timezone.utc) - timedelta(minutes=10)
     aceptadas, latencias = 0, []
     for i in range(CARGA):
         id_tx = str(uuid.uuid4())
