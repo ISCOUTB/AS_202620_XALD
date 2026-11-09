@@ -66,7 +66,7 @@ Cada escenario sigue las seis partes que exige arc42: fuente, estímulo, artefac
 | **Artefacto** | Data & Sync Module (Sync Queue) y Backend XALD (motor LWW) |
 | **Entorno** | Restablecimiento de la conexión en ambos dispositivos |
 | **Respuesta** | Se aplica la política Last-Write-Wins tomando la marca de tiempo más reciente, sin duplicar ni sobrescribir saldos |
-| **Medida** | **Umbral:** 100 % de conflictos resueltos automáticamente, 0 transacciones distintas perdidas · **Carga:** 30 transacciones en conflicto simultáneo · **Herramienta:** dos emuladores con relojes sincronizados, verificación por comparación de estado final contra el esperado |
+| **Medida** | **Umbral:** 100 % de conflictos resueltos automáticamente, 0 transacciones distintas perdidas · **Carga:** 30 transacciones en conflicto simultáneo · **Herramienta:** script `backend/scripts/medir_esc05.py` (cliente HTTP que simula dos dispositivos) y prueba `test_medicion_esc05_30_transacciones_en_conflicto`; verificación por conteo de la métrica `xald_sync_conflictos_resueltos_total` y por estado final |
 
 **Objetivo de calidad:** 4 (Consistencia eventual) · **Objetivo de negocio:** OB-02 · **Restricción:** RT-05
 
