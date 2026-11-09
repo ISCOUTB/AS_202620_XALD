@@ -34,3 +34,36 @@ Se mide **ESC-05**, declarado en [arc42 §10](arc42/10-Quality%20Requirements.md
 **Repeticiones:** 3 ejecuciones contra el backend desplegado y 1 corrida de la prueba local. Cada ejecución usa UUID nuevos, por lo que son independientes.
 
 **Límites del procedimiento:** el script remoto cuenta respuestas 202 y el contador, pero no puede leer el estado interno del backend; la comprobación de "gana la más reciente" solo la hace la prueba local. El envío es secuencial, no simultáneo.
+
+## 3. Reproducibilidad
+
+**Artefactos versionados**
+
+| Artefacto | Ruta | Para qué |
+|---|---|---|
+| Script de medición | `backend/scripts/medir_esc05.py` | Ejecuta la carga contra cualquier URL |
+| Prueba de medición | `backend/tests/test_lww.py` | Misma carga, sin red |
+| Backend medido | `backend/app/main.py`, `backend/app/dtos.py` | Motor LWW y métricas |
+| Dependencias fijadas | `backend/requirements.txt`, `backend/Dockerfile` | Versiones exactas (`==`), Python 3.12 |
+| Variables requeridas | `.env.example` | `XALD_API_KEY` sin valor |
+| Despliegue | `render.yaml`, README §4 | Cómo recrear el servicio desplegado |
+
+**Reproducir en local (sin red)**
+```powershell
+cd backend
+pip install -r requirements.txt
+python -m pytest tests/test_lww.py -k medicion_esc05 -s
+```
+Salida esperada: una línea `ESC-05 · carga=30 · resueltos=30 · ganó la versión más reciente=30/30 (100 %) · perdidas=0`.
+
+**Reproducir el script contra un backend propio**
+```powershell
+cp .env.example .env            # poner XALD_API_KEY=dev-key-123
+docker build -t xald-backend ./backend
+docker run --rm -p 8000:8000 --env-file .env xald-backend
+# en otra consola, desde la raíz del repositorio:
+$env:XALD_API_KEY = "dev-key-123"
+python backend/scripts/medir_esc05.py http://localhost:8000
+```
+
+**Contra el backend desplegado:** la llave de producción es secreta y no está en el repositorio. Otra persona debe recrear el servicio con el Blueprint (README §4), cargar su propia llave y pasar su URL al script.
