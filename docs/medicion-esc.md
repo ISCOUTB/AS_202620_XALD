@@ -67,3 +67,18 @@ python backend/scripts/medir_esc05.py http://localhost:8000
 ```
 
 **Contra el backend desplegado:** la llave de producción es secreta y no está en el repositorio. Otra persona debe recrear el servicio con el Blueprint (README §4), cargar su propia llave y pasar su URL al script.
+
+## 4. Resultados
+
+| Ejecución | Entorno | Fecha (UTC) | Conflictos resueltos (umbral 100 %) | Perdidas (umbral 0) | Latencia p50 / p95 | Resultado |
+|---|---|---|---|---|---|---|
+| 1 | Render (desplegado) | ___ | ___/30 (___ %) | ___ | ___ / ___ ms | ___ |
+| 2 | Render (desplegado) | ___ | ___/30 (___ %) | ___ | ___ / ___ ms | ___ |
+| 3 | Render (desplegado) | ___ | ___/30 (___ %) | ___ | ___ / ___ ms | ___ |
+| pytest | Local (`TestClient`) | ___ | ___/30 (___ %) | ___ | n/a | ___ |
+
+Los valores de las filas 1 a 3 se copian de la salida del script; la fila pytest, de su línea `ESC-05 · carga=...`.
+
+**Conclusión.** Con la carga declarada (30 transacciones en conflicto), el backend resolvió ___/30 conflictos (___ %) frente al umbral de 100 %, y perdió ___ transacciones frente al umbral de 0. El escenario ESC-05 **cumple / no cumple** el umbral en las ___ ejecuciones.
+
+**Alcance de la conclusión.** Valida el motor LWW del backend bajo la carga declarada. No valida la Sync Queue Android (sin cliente HTTP aún), ni el uso de dos dispositivos reales, ni la persistencia: el estado de LWW vive en memoria y se pierde al reiniciar el servicio.
