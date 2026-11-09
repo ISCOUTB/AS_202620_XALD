@@ -72,6 +72,26 @@ Cada escenario sigue las seis partes que exige arc42: fuente, estímulo, artefac
 
 **Medición:** [docs/medicion-esc05.md](../medicion-esc05.md)
 
+#### Entorno de la medición de ESC-05
+
+La medición se hizo contra el **Backend XALD desplegado**, no en local.
+
+| Aspecto | Declaración |
+|---|---|
+| **Sistema medido** | Backend XALD en Render (Web Service Docker, plan Free, región Oregon), `https://xald-backend.onrender.com` ([ADR-0008](../adr/0008-plataforma-de-despliegue.md)). |
+| **Quién mide** | `backend/scripts/medir_esc05.py`, ejecutado desde [completar: equipo, sistema operativo, versión de Python y red desde donde se corrió]. |
+| **Fecha** | [completar: la línea `Fecha (UTC)` que imprime el script en la corrida que se reporta]. |
+| **Preparación** | El script llama a `GET /health` antes de empezar para despertar el servicio (Render Free duerme tras 15 min sin tráfico). Lee el contador `xald_sync_conflictos_resueltos_total` de `/metrics` antes y después, y el resultado es la diferencia. |
+| **Estado del servidor** | `ultima_version` vive en memoria y empieza vacío en cada arranque. Si Render reinicia el servicio en medio de la corrida, el contador vuelve a cero y la diferencia sale mal; en ese caso se repite la corrida. |
+| **Repeticiones** | [completar: cuántas corridas se hicieron y cuál se reporta]. |
+| **Prueba local complementaria** | `test_medicion_esc05_30_transacciones_en_conflicto` en `backend/tests/test_lww.py` usa `TestClient`, es decir, corre en local (también en el CI) y no sale por red. No reemplaza la medición desplegada. |
+
+**Diferencias frente a lo que declara el escenario arriba:**
+
+* La herramienta del escenario eran dos emuladores con relojes sincronizados. La medición usó **un solo cliente HTTP** que hace de los dos dispositivos: envía dos versiones del mismo UUID, alternando cuál llega primero.
+* La carga del escenario era de 30 conflictos simultáneos. El script los envía **uno tras otro** (60 envíos).
+* Por lo anterior, esta medición verifica la regla LWW del backend, pero **no verifica relojes reales de dos dispositivos**, que sigue siendo el riesgo abierto de ESC-05 (ver [Sección 11](11-Risks%20and%20Technical%20Debts.md)). 
+
 ## Árbol de utilidad
 
 Notación: **(Impacto en el negocio, Riesgo técnico)** en escala Alto / Medio / Bajo.
