@@ -88,7 +88,7 @@ La medición se hizo contra el **Backend XALD desplegado**, no en local.
 
 **Diferencias frente a lo que declara el escenario arriba:**
 
-* La herramienta del escenario eran dos emuladores con relojes sincronizados. La medición usó **un solo cliente HTTP** que hace de los dos dispositivos: envía dos versiones del mismo UUID, alternando cuál llega primero.
+* La herramienta prevista originalmente eran dos emuladores con relojes sincronizados. La medición usó **un solo cliente HTTP** que hace de los dos dispositivos: envía dos versiones del mismo UUID, alternando cuál llega primero.
 * La carga del escenario era de 30 conflictos simultáneos. El script los envía **uno tras otro** (60 envíos).
 * Por lo anterior, esta medición verifica la regla LWW del backend, pero **no verifica relojes reales de dos dispositivos**, que sigue siendo el riesgo abierto de ESC-05 (ver [Sección 11](11-Risks%20and%20Technical%20Debts.md)). 
 
