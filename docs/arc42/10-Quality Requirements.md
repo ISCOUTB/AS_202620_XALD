@@ -70,6 +70,8 @@ Cada escenario sigue las seis partes que exige arc42: fuente, estímulo, artefac
 
 **Objetivo de calidad:** 4 (Consistencia eventual) · **Objetivo de negocio:** OB-02 · **Restricción:** RT-05
 
+**Medición:** [docs/medicion-esc05.md](../medicion-esc05.md)
+
 ## Árbol de utilidad
 
 Notación: **(Impacto en el negocio, Riesgo técnico)** en escala Alto / Medio / Bajo.
