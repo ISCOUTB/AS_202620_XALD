@@ -1,12 +1,7 @@
 package com.proyecto.xald.corefinanciero
 
 /**
- * Objeto de solo lectura empaquetado por el núcleo financiero.
- * Sirve de contrato seguro para enviar datos al módulo :syncqueue sin exponer la tabla original.
- *
- * Evolución compatible (docs/mensajes/README.md §2): los campos `moneda`, `categoria` y
- * `origenDatos` se añadieron con valor por defecto, así que todo código que construía el
- * DTO con los cuatro campos originales sigue compilando sin cambios.
+ * Objeto de transferencia de datos (DTO) compartido para la cola de sincronización.
  */
 data class PayloadSincronizacionDTO(
     val idTransaccion: String,

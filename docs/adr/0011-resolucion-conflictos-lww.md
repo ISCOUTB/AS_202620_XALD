@@ -19,7 +19,7 @@ Por el modelo Offline-First (ADR-0001), una transacción nace en el dispositivo 
 
 1. El identificador de la transacción es un **UUID generado en el dispositivo** en el momento del registro y no cambia nunca (`id_transaccion`, `TransaccionDTO`).
 2. La **versión** de una transacción es su `fecha_transaccion` (ISO 8601, UTC), tomada del reloj del dispositivo.
-3. El backend conserva la versión con la fecha más reciente. Con fechas iguales conserva la que ya tenía (la comparación es estrictamente mayor, `main.py`).
+3. El backend conserva la versión con la fecha más reciente. Con fechas iguales conserva la que ya tenía (la comparación es estrictamente mayor, `repositorio.py`).
 4. Reenviar una transacción ya recibida no crea un registro nuevo: la identidad es el UUID, así que el envío es idempotente.
 
 ## Consecuencias
@@ -46,16 +46,16 @@ Costo de reversión, si algún día se cambia a versiones asignadas por el servi
 
 * **Riesgo:** LWW depende de que el reloj del dispositivo sea confiable. Un reloj adelantado hace que su versión gane siempre. Este es el riesgo de mayor probabilidad de ESC-05 (Sección 11).
 * **Mitigación:** ninguna formalizada. Queda declarado como deuda: una opción futura es que el backend registre su propia hora de recepción y rechace fechas muy por delante de ella.
-* **Riesgo:** el estado de versiones (`ultima_version` en `main.py`) vive en memoria y se pierde en cada despliegue o cuando Render duerme el servicio (ADR-0008).
-* **Mitigación:** pendiente la persistencia remota. Mientras tanto la garantía vale solo dentro de un mismo periodo de vida del proceso.
+* **Riesgo (resuelto en noviembre 2026):** el estado de versiones (`ultima_version` en `main.py`) vivía en memoria y se perdía en cada despliegue o cuando Render dormía el servicio (ADR-0008).
+* **Mitigación:** la versión vigente de cada transacción ahora se guarda en PostgreSQL y la comparación se hace con `SELECT ... FOR UPDATE` ([ADR-0015](0015-persistencia-remota-postgres.md)).
 
 ## Puntos Abiertos
 
-* Persistencia remota del estado de versiones (clave única por `id_transaccion`).
+* ~~Persistencia remota del estado de versiones (clave única por `id_transaccion`).~~ Resuelto en [ADR-0015](0015-persistencia-remota-postgres.md).
 * Política ante relojes desfasados.
 
 **Trazabilidad:**
-* Implementación: [`backend/app/main.py`](../../backend/app/main.py), [`GestorCoreFinanciero.kt`](../../XALDAPP/corefinanciero/src/main/java/com/proyecto/xald/corefinanciero/GestorCoreFinanciero.kt)
+* Implementación: [`backend/app/repositorio.py`](../../backend/app/repositorio.py), [`GestorCoreFinanciero.kt`](../../XALDAPP/corefinanciero/src/main/java/com/proyecto/xald/corefinanciero/GestorCoreFinanciero.kt)
 * Pruebas: [`backend/tests/test_lww.py`](../../backend/tests/test_lww.py), [`backend/scripts/medir_esc05.py`](../../backend/scripts/medir_esc05.py)
 * Decisiones relacionadas: [ADR-0001](0001-patron-offline-first.md), [ADR-0008](0008-plataforma-de-despliegue.md), [ADR-0009](0009-distribucion-app.md)
 * Restricción y escenario: RT-05, ESC-05 ([arc42 §2](../arc42/02-Architecture%20constraints.md), [arc42 §10](../arc42/10-Quality%20Requirements.md))

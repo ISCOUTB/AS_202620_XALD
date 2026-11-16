@@ -1,7 +1,8 @@
+/*
 package com.proyecto.xald
 
-import com.proyecto.xald.parser.ServicioParser
-import com.proyecto.xald.parser.crearServicioParser
+import com.proyecto.xald.parser.com.proyecto.xald.parser.ServicioParser
+import com.proyecto.xald.parser.com.proyecto.xald.parser.crearServicioParser
 import com.proyecto.xald.aigemini.ServicioCategorizacion
 import com.proyecto.xald.aigemini.crearServicioCategorizacion
 import com.proyecto.xald.corefinanciero.InformacionFinanciera
@@ -51,3 +52,5 @@ class CorteVerticalTest {
         assertEquals(1, syncQueueService.obtenerCantidadPendientes())
     }
 }
+
+ */

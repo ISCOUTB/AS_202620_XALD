@@ -5,13 +5,17 @@ import os
 import sys
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
-from app.dtos import RespuestaSincronizacion, TransaccionDTO
+from app import db, repositorio
+from app.dtos import RespuestaSincronizacion, TransaccionDTO, TransaccionGuardada
+from app.repositorio import Resultado
 
 
 # ---------------------------------------------------------------------------
@@ -57,47 +61,19 @@ CONFLICTOS_RESUELTOS = Counter(
     "Conflictos de sincronización resueltos por Last-Write-Wins (ESC-05)",
 )
 
-# Estado en memoria para aplicar Last-Write-Wins (RT-05).
-# Se reinicia con cada despliegue: la persistencia remota sigue pendiente.
-ultima_version = {}
+ERRORES_BD = Counter(
+    "xald_bd_errores_total",
+    "Peticiones que fallaron porque la base de datos no respondió (el cliente recibe 503 y reintenta)",
+)
 
 
 # ---------------------------------------------------------------------------
 # Seguridad: la llave se toma del entorno, nunca del código
-# Amenaza AM-01 (docs/seguridad/modelo-amenazas.md) y ADR-0015: se aceptan varias
-# llaves vigentes a la vez (XALD_API_KEYS, separadas por comas) para poder rotar o
-# revocar una llave filtrada sin dejar sin servicio a los dispositivos que ya
-# tienen la nueva. XALD_API_KEY (una sola) se mantiene por compatibilidad.
 # ---------------------------------------------------------------------------
-def llaves_vigentes():
-    llaves = [
-        llave.strip()
-        for llave in os.environ.get("XALD_API_KEYS", "").split(",") + [os.environ.get("XALD_API_KEY", "")]
-        if llave.strip()
-    ]
-    return llaves
-
-
 def verificar_llave(llave: str = Header(default="", alias="X-API-Key")):
-    vigentes = llaves_vigentes()
-    # compare_digest contra todas las llaves, sin cortar en la primera coincidencia,
-    # para no filtrar por tiempo de respuesta cuál de ellas coincidió.
-    coincide = False
-    for esperada in vigentes:
-        coincide |= hmac.compare_digest(llave.encode(), esperada.encode())
-    if not vigentes or not llave or not coincide:
+    esperada = os.environ.get("XALD_API_KEY", "")
+    if not esperada or not hmac.compare_digest(llave, esperada):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key inválida")
-
-
-# ---------------------------------------------------------------------------
-# Amenaza AM-07: un cliente con la llave podría mandar una fecha futura para ganar
-# siempre el Last-Write-Wins (ADR-0011) y bloquear correcciones legítimas.
-# Se rechaza toda fecha más allá de la tolerancia de reloj declarada.
-# ---------------------------------------------------------------------------
-TOLERANCIA_RELOJ = timedelta(minutes=5)
-
-# Amenaza AM-08: cuerpo sin límite de tamaño. Una transacción válida ocupa < 1 KB.
-TAMANO_MAXIMO_CUERPO = 16 * 1024
 
 
 # ---------------------------------------------------------------------------
@@ -116,23 +92,64 @@ def verificar_version_esquema(version: str = Header(default="1", alias="X-Versio
         )
 
 
+# ---------------------------------------------------------------------------
+# Persistencia remota (ADR-0015): la versión vigente de cada transacción vive en la BD,
+# no en memoria, así que Last-Write-Wins sobrevive a despliegues y a que Render duerma.
+# ---------------------------------------------------------------------------
+tablas_listas = False
+
+
+def asegurar_tablas():
+    global tablas_listas
+    if not tablas_listas:
+        db.crear_tablas()
+        tablas_listas = True
+
+
+@asynccontextmanager
+async def ciclo_de_vida(_app):
+    # Si la BD no responde al arrancar, el servicio igual sube (el health check de Render
+    # no depende de la BD) y las tablas se crean en la primera petición que la necesite.
+    try:
+        asegurar_tablas()
+        registrar("bd_lista", motor=db.motor.dialect.name)
+    except SQLAlchemyError as e:
+        logger.error("bd_no_disponible_al_arrancar", extra={"campos": {"error": e.__class__.__name__}})
+    yield
+
+
+def obtener_sesion():
+    try:
+        asegurar_tablas()
+        sesion = db.FabricaSesiones()
+    except SQLAlchemyError as e:
+        raise _bd_no_disponible(e)
+    try:
+        yield sesion
+    finally:
+        sesion.close()
+
+
+def _bd_no_disponible(error):
+    ERRORES_BD.inc()
+    logger.error("bd_no_disponible", extra={"campos": {"error": error.__class__.__name__}})
+    # 503 es recuperable para el cliente (clasificarRespuestaHttp en :syncqueue): reintenta con
+    # espera exponencial y la transacción no se pierde.
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Base de datos no disponible, reintente más tarde.",
+    )
+
+
 app = FastAPI(
     title="API de Sincronización Financiera - Proyecto XALD",
-    version="1.0.0"
+    version="1.1.0",
+    lifespan=ciclo_de_vida,
 )
 
 
 @app.middleware("http")
 async def registrar_peticion(request: Request, call_next):
-    if request.method == "POST":
-        longitud = request.headers.get("content-length")
-        if longitud is None or not longitud.isdigit():
-            return JSONResponse(status_code=status.HTTP_411_LENGTH_REQUIRED, content={"detail": "Content-Length requerido"})
-        if int(longitud) > TAMANO_MAXIMO_CUERPO:
-            return JSONResponse(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                content={"detail": f"Cuerpo mayor a {TAMANO_MAXIMO_CUERPO} bytes"},
-            )
     # Trazabilidad productor -> consumidor: el cliente manda X-Correlation-Id (estable entre
     # reintentos); si no llega, se genera uno para no perder la traza de esta petición.
     id_correlacion = request.headers.get("X-Correlation-Id") or str(uuid.uuid4())
@@ -173,26 +190,21 @@ async def metrics():
     summary="Recibir transacción financiera desde la cola de sincronización",
     dependencies=[Depends(verificar_llave), Depends(verificar_version_esquema)],
 )
-async def registrar_transaccion(transaccion: TransaccionDTO, request: Request):
+def registrar_transaccion(transaccion: TransaccionDTO, request: Request, sesion: Session = Depends(obtener_sesion)):
+    # Función síncrona a propósito: FastAPI la corre en su pool de hilos y la consulta a la BD
+    # no bloquea el event loop.
     id_correlacion = request.state.id_correlacion
-
-    fecha = transaccion.fecha_transaccion
-    if fecha.tzinfo is None:
-        fecha = fecha.replace(tzinfo=timezone.utc)
-    if fecha > datetime.now(timezone.utc) + TOLERANCIA_RELOJ:
-        registrar("fecha_futura_rechazada", id_correlacion=id_correlacion, id_transaccion=transaccion.id_transaccion)
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="fecha_transaccion está en el futuro más allá de la tolerancia de reloj (5 min)",
-        )
-
     TRANSACCIONES_RECIBIDAS.labels(origen_datos=transaccion.origen_datos.value).inc()
 
-    previa = ultima_version.get(transaccion.id_transaccion)
+    try:
+        resultado = repositorio.registrar(sesion, transaccion, id_correlacion)
+    except SQLAlchemyError as e:
+        sesion.rollback()
+        raise _bd_no_disponible(e)
 
     # Idempotencia (arc42 §8, MF-03): un reenvío idéntico (mismo id y misma fecha)
     # no es un conflicto. Se responde igual que la primera vez y no cambia el estado.
-    if previa is not None and transaccion.fecha_transaccion == previa:
+    if resultado is Resultado.DUPLICADO:
         DUPLICADOS.inc()
         registrar(
             "reenvio_duplicado_ignorado",
@@ -205,15 +217,13 @@ async def registrar_transaccion(transaccion: TransaccionDTO, request: Request):
             mensaje="Transacción ya recibida previamente; reenvío idempotente sin cambios."
         )
 
-    if previa is None or transaccion.fecha_transaccion > previa:
-        ultima_version[transaccion.id_transaccion] = transaccion.fecha_transaccion
-    if previa is not None:
+    if resultado in (Resultado.GANA_ENTRANTE, Resultado.GANA_EXISTENTE):
         CONFLICTOS_RESUELTOS.inc()
         registrar(
             "conflicto_resuelto_lww",
             id_correlacion=id_correlacion,
             id_transaccion=transaccion.id_transaccion,
-            gano="entrante" if transaccion.fecha_transaccion > previa else "existente",
+            gano="entrante" if resultado is Resultado.GANA_ENTRANTE else "existente",
         )
 
     registrar(
@@ -225,5 +235,35 @@ async def registrar_transaccion(transaccion: TransaccionDTO, request: Request):
     return RespuestaSincronizacion(
         estado="ACEPTADO",
         id_transaccion=transaccion.id_transaccion,
-        mensaje="Transacción recibida y encolada exitosamente para persistencia."
+        mensaje=(
+            "Transacción recibida; se conserva una versión más reciente (Last-Write-Wins)."
+            if resultado is Resultado.GANA_EXISTENTE
+            else "Transacción recibida y guardada."
+        ),
+    )
+
+
+@app.get(
+    "/api/v1/transacciones/{id_transaccion}",
+    response_model=TransaccionGuardada,
+    summary="Consultar la versión que el backend conserva de una transacción",
+    dependencies=[Depends(verificar_llave)],
+)
+def consultar_transaccion(id_transaccion: str, sesion: Session = Depends(obtener_sesion)):
+    try:
+        fila = repositorio.obtener(sesion, id_transaccion)
+    except SQLAlchemyError as e:
+        raise _bd_no_disponible(e)
+    if fila is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transacción no encontrada")
+    return TransaccionGuardada(
+        id_transaccion=fila.id_transaccion,
+        monto=float(fila.monto),
+        moneda=fila.moneda,
+        comercio=fila.comercio,
+        categoria=fila.categoria,
+        fecha_transaccion=db.en_utc(fila.fecha_transaccion),
+        origen_datos=fila.origen_datos,
+        recibida_en=db.en_utc(fila.recibida_en),
+        actualizada_en=db.en_utc(fila.actualizada_en),
     )

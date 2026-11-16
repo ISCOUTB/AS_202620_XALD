@@ -25,11 +25,17 @@ os.environ.setdefault("XALD_API_KEY", "clave-de-pruebas-ci")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import main  # noqa: E402
+from app import db, main, repositorio  # noqa: E402
 
 client = TestClient(main.app)
 LLAVE = os.environ["XALD_API_KEY"]
 EJEMPLOS = Path(__file__).resolve().parents[2] / "docs" / "mensajes" / "ejemplos"
+
+
+def fecha_guardada(id_transaccion):
+    """Versión que quedó guardada en la base de datos (antes: main.ultima_version en memoria)."""
+    with db.FabricaSesiones() as sesion:
+        return repositorio.fecha_vigente(sesion, id_transaccion)
 
 
 def ejemplo(nombre, **cambios):
@@ -84,7 +90,7 @@ def test_duplicado_mismo_mensaje_reenviado_no_cambia_estado_y_queda_en_el_log(ev
     reenvio = enviar(cuerpo, corr)
 
     assert primera.status_code == reenvio.status_code == 202
-    assert main.ultima_version[cuerpo["id_transaccion"]].isoformat().startswith(cuerpo["fecha_transaccion"][:19])
+    assert fecha_guardada(cuerpo["id_transaccion"]).isoformat().startswith(cuerpo["fecha_transaccion"][:19])
     assert contador("xald_sync_duplicados_total") == duplicados_antes + 1
     assert contador("xald_sync_conflictos_resueltos_total") == conflictos_antes
 
@@ -107,13 +113,13 @@ def test_fallo_recuperable_respuesta_perdida_el_reintento_da_el_mismo_resultado(
     recibidas_antes = contador('xald_transacciones_recibidas_total{origen_datos="SMS_REGEX"}')
 
     enviar(cuerpo, corr)  # respuesta "perdida"
-    estado_tras_primer_envio = main.ultima_version[cuerpo["id_transaccion"]]
+    estado_tras_primer_envio = fecha_guardada(cuerpo["id_transaccion"])
     reintento = enviar(cuerpo, corr)
 
     assert reintento.status_code == 202
     assert reintento.json()["estado"] == "ACEPTADO"
     assert reintento.headers["X-Correlation-Id"] == corr
-    assert main.ultima_version[cuerpo["id_transaccion"]] == estado_tras_primer_envio
+    assert fecha_guardada(cuerpo["id_transaccion"]) == estado_tras_primer_envio
     # El contador de recepción sí cuenta las dos llegadas (límite declarado en arc42 §8).
     assert contador('xald_transacciones_recibidas_total{origen_datos="SMS_REGEX"}') == recibidas_antes + 2
 

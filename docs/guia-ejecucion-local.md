@@ -95,3 +95,19 @@ El objetivo es ofrecer a los usuarios una herramienta intuitiva y eficiente para
 ### Situación problema 
 
 Muchas personas carecen de un control claro sobre sus ingresos, gastos y ahorros, lo que dificulta tomar decisiones financieras informadas y favorece el endeudamiento innecesario. Esto se debe, en parte, al uso de métodos poco eficientes( cuadernos, hojas de calculo genéricas o ningún registro) y a que las aplicaciones existentes suelen ser demasiado complejas o demasiado básicas para cubrir sus necesidades reales. Esta app surge para resolver esta problemática, ofreciendo una herramienta simple y accesible que permita a los usuarios comprender y organizar su actividad económica diaria.
+
+## 🗄️ Base de datos del backend (ADR-0015)
+
+- Sin `DATABASE_URL` el backend usa SQLite en `backend/xald-local.db` (ignorado por git). No hay que instalar nada.
+- Para probar contra Postgres, como en producción:
+  ```powershell
+  docker run -d --name xald-pg -e POSTGRES_USER=xald -e POSTGRES_PASSWORD=xald -e POSTGRES_DB=xald -p 5432:5432 postgres:16
+  $env:DATABASE_URL = "postgresql://xald:xald@localhost:5432/xald"
+  ```
+- Pruebas del backend contra ese Postgres (incluye la prueba de concurrencia, que en SQLite se omite):
+  ```powershell
+  cd backend
+  $env:XALD_TEST_DATABASE_URL = "postgresql://xald:xald@localhost:5432/xald"
+  python -m pytest tests/ -v -rs
+  ```
+- Para que el emulador de Android hable con el backend local, deja `XALD_API_URL` fuera de `local.properties` (usa `http://10.0.2.2:8000`) y arranca el backend con `uvicorn app.main:app --port 8000`.
