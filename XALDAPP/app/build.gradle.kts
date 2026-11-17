@@ -39,6 +39,17 @@ android {
         buildConfigField("String", "XALD_API_KEY", "\"$xaldApiKey\"")
     }
 
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+
     buildFeatures {
         buildConfig = true
     }

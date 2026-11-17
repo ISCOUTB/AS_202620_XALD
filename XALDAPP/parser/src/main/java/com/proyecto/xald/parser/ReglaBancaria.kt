@@ -20,7 +20,7 @@ internal object ReglasBancariasCatalogo {
             nombreEntidad = "Bancolombia",
             remitentesPermitidos = setOf("890900", "85534", "Bancolombia"),
             patronRegex = Pattern.compile(
-                """compra\s+por\s+\$\s*([\d\.,]+)\s+en\s+(.+?)(?:\s+\d{2}/\d{2}/\d{4}|\.\s*$)""",
+                """compra\s+por\s+\$\s*([\d\.,]+)\s+en\s+(.+?)(?:(?:\s+\d{2}/\d{2}/\d{4})|(?:\.\s*$))""",
                 Pattern.CASE_INSENSITIVE
             )
         ),
@@ -29,7 +29,7 @@ internal object ReglasBancariasCatalogo {
             nombreEntidad = "Davivienda",
             remitentesPermitidos = setOf("85888", "Davivienda"),
             patronRegex = Pattern.compile(
-                """compro\s+por\s+\$\s*([\d\.,]+)\s+en\s+(.+?)(?:\s+el\s+|\.\s*$)""",
+                """compro\s+por\s+\$\s*([\d\.,]+)\s+en\s+(.+?)(?:(?:\s+el\s+)|(?:\.\s*$))""",
                 Pattern.CASE_INSENSITIVE
             )
         ),
@@ -38,10 +38,9 @@ internal object ReglasBancariasCatalogo {
             nombreEntidad = "Nequi",
             remitentesPermitidos = setOf("85954", "Nequi"),
             patronRegex = Pattern.compile(
-                """pagaste\s+\$\s*([\d\.,]+)\s+a\s+(.+?)(?:\.|\s*$)""",
+                """pagaste\s+\$\s*([\d\.,]+)\s+a\s+(.+?)(?:(?:\.)|(?:\s*$))""",
                 Pattern.CASE_INSENSITIVE
             )
         )
     )
 }
-
