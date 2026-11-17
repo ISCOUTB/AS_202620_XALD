@@ -11,7 +11,9 @@ RUN adduser --disabled-password --gecos "" appuser && \
     fastapi==0.115.0 \
     httpx==0.27.0 \
     prometheus-client==0.20.0 \
+    "psycopg[binary]==3.2.3" \
     pydantic==2.9.0 \
+    sqlalchemy==2.0.36 \
     "uvicorn[standard]==0.30.0"
 
 COPY app ./app

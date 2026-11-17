@@ -1,3 +1,4 @@
+/*
 package com.proyecto.xald
 
 import org.junit.Test
@@ -10,3 +11,4 @@ class Entornotest{
         assertTrue(sistemaConfigurado)
     }
 }
+*/

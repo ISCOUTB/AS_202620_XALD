@@ -175,3 +175,25 @@ El sistema no usa un broker de mensajes (ni Kafka ni RabbitMQ; ver la nota de br
 * **Por qué no «exactamente una vez» a nivel de red:** exigiría coordinación transaccional entre el dispositivo y el backend, que no es posible con la red intermitente que asume Offline-First. Se obtiene el mismo efecto con al menos una vez más un receptor idempotente.
 * **Qué NO garantiza:** orden global entre transacciones distintas. Si el mismo payload llega dos veces, el contador `xald_transacciones_recibidas_total` sí lo cuenta dos veces (se incrementa en `main.py:139`, antes de la comprobación de idempotencia), aunque el dato no se duplica (MF-03, Sección 11).
 * **Estado:** el reenvío idempotente está implementado en el backend, y desde la semana 12 la cola del cliente retira solo lo confirmado, reintenta y tiene cliente HTTP (`TransporteHttpSincronizacion`). Falta persistir la cola (Sección 11, planes P-01 y P-02; ver [ADR-0014](../adr/0014-sincronizacion-asincrona-con-reintentos.md)).
+
+---
+
+## 8.10 Arquitectura de Seguridad
+
+*Semana 13.* La seguridad de XALD se organiza por **fronteras de confianza** del C2 ([`docs/c4/c2.md`](../c4/c2.md)). El modelado STRIDE completo, con probabilidad, impacto, dueño y estado de cada amenaza, está en [`docs/seguridad/modelo-amenazas.md`](../seguridad/modelo-amenazas.md). Las amenazas aceptadas y su motivo están en la Sección 11.4.
+
+| Frontera | Elemento del C2 | Control | Amenazas | Dónde está |
+|---|---|---|---|---|
+| **FC-1** Teléfono ↔ mundo (SMS) | Conector 1, `:parser` | Solo se procesa el SMS de un remitente bancario declarado en la regla del banco | AM-05 | [ADR-0016](../adr/0016-validacion-del-remitente-sms.md) — pendiente, con el `BroadcastReceiver` |
+| **FC-1** Teléfono ↔ mundo (almacenamiento) | BD local, almacén de la cola, caché | Cifrado AES-256 con SQLCipher y llave en Android Keystore; sin copia de seguridad en la nube ni transferencia a otro dispositivo | AM-02, AM-13 | [ADR-0004](../adr/0004-seguridad-y-cifrado.md); `allowBackup="false"` y `res/xml/*_rules.xml` (hecho) |
+| **FC-2** Dispositivo ↔ Gemini | Conector 2, `:aigemini`, caché de categorías | Frontera de datos mínima (solo el comercio), prompt fijo, salida validada contra un catálogo cerrado y caché que solo acepta salidas validadas | AM-06, AM-09, AM-10, AM-11 | [ADR-0017](../adr/0017-frontera-de-datos-del-componente-generativo.md) |
+| **FC-2 / FC-3** Dispositivo ↔ backend | Conector 4, API de sincronización | HTTPS obligatorio (`usesCleartextTraffic="false"`); `X-API-Key` comparada en tiempo constante; varias llaves vigentes para rotar; token por instalación antes de publicar | AM-01, AM-14, AM-17 | `verificar_llave` en `backend/app/main.py`; [ADR-0015](../adr/0015-autenticacion-del-cliente-movil.md) |
+| **FC-3** Backend ↔ Internet | API de sincronización, estado de versiones | Cuerpo limitado a 16 KB (413/411); fecha futura rechazada (422) para proteger el LWW; contenedor sin privilegios (`appuser`); dependencias sin vulnerabilidades conocidas | AM-04, AM-07, AM-08, AM-12, AM-15 | `backend/app/main.py`, `backend/tests/test_seguridad.py`, `backend/Dockerfile` |
+| **FC-4** Repositorio y pipeline | GitHub Actions → Render | Secretos solo en GitHub Secrets y Render; `.env` ignorado; barrido del historial; análisis de dependencias que bloquea el despliegue si hay un hallazgo sin decisión; Dependabot | AM-03, AM-04, AM-18 | `.github/workflows/ci.yml` (job `dependency-audit`), `.github/dependabot.yml`, [análisis de dependencias](../seguridad/analisis-dependencias.md) |
+
+**Principios que aplican en todo el sistema:**
+
+* **Minimización de datos.** El sistema no recolecta correo, nombre, teléfono, ubicación ni cuenta de Google. A Gemini solo viaja el comercio, y al backend no llega el texto del SMS. El detalle y la base legal están en [`docs/seguridad/privacidad.md`](../seguridad/privacidad.md).
+* **Nada de secretos en el código.** Llaves y hooks salen del entorno y ninguna llave del backend se compila en un APK publicado (ADR-0015).
+* **El peor caso es degradado, no inseguro.** Si falla la autenticación, el registro local sigue funcionando (ESC-01). Si falla o se manipula la IA, la transacción queda «Sin Categorizar» (ESC-02).
+* **Los logs no llevan datos financieros.** El backend registra `id_transaccion` y `X-Correlation-Id`, nunca monto, comercio ni categoría (ADR-0010).

@@ -37,11 +37,20 @@ def contador():
 
 def enviar(id_tx, fecha):
     cuerpo = json.dumps({
-        "id_transaccion": id_tx, "monto": 45900.0, "moneda": "COP", "comercio": "Tienda Ara",
-        "categoria": "Supermercado", "fecha_transaccion": fecha.isoformat(), "origen_datos": "SMS_REGEX",
+        "id_transaccion": id_tx,
+        "monto": 45900.0,
+        "moneda": "COP",
+        "comercio": "Tienda Ara",
+        "categoria": "Supermercado",
+        "fecha_transaccion": fecha.isoformat(),
+        "origen_datos": "SMS_REGEX",
     }).encode()
-    peticion = urllib.request.Request(f"{URL}/api/v1/transacciones", data=cuerpo, method="POST",
-                                      headers={"Content-Type": "application/json", "X-API-Key": LLAVE})
+    peticion = urllib.request.Request(
+        f"{URL}/api/v1/transacciones",
+        data=cuerpo,
+        method="POST",
+        headers={"Content-Type": "application/json", "X-API-Key": LLAVE},
+    )
     inicio = time.perf_counter()
     try:
         with urllib.request.urlopen(peticion, timeout=120) as r:
@@ -66,7 +75,8 @@ def main():
             aceptadas += codigo == 202
             latencias.append(ms)
     resueltos = contador() - antes
-    perdidas = 2 * CARGA - aceptadas
+    perdidas = (2 * CARGA) - aceptadas
+
     latencias.sort()
     p95 = latencias[int(len(latencias) * 0.95) - 1]
     cumple = perdidas == 0 and resueltos == CARGA
@@ -80,4 +90,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main()

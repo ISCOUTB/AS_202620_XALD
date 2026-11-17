@@ -10,5 +10,21 @@ services:
     envVars:
       - key: XALD_API_KEY
         sync: false
+      # Rotación de llaves (ADR-0015): lista separada por comas de llaves vigentes.
+      - key: XALD_API_KEYS
+        sync: false
       - key: LOG_LEVEL
         value: INFO
+      # Persistencia remota (ADR-0015): Render inyecta la cadena de conexión del Postgres de abajo.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: xald-db
+          property: connectionString
+
+databases:
+  # Plan Free: 1 GB, una sola por cuenta, vence 30 días después de creada (ver ADR-0015).
+  - name: xald-db
+    plan: free
+    databaseName: xald
+    user: xald
+    ipAllowList: []  # solo accesible desde los servicios de Render, no desde internet

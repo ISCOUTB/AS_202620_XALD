@@ -39,6 +39,23 @@ jobs:
   backend-tests:
     runs-on: ubuntu-latest
 
+    # Postgres real para las pruebas del backend (ADR-0015): así corre también la prueba
+    # de concurrencia, que en SQLite se omite.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: xald
+          POSTGRES_PASSWORD: xald
+          POSTGRES_DB: xald_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U xald"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout del repositorio
         uses: actions/checkout@v4
@@ -55,14 +72,18 @@ jobs:
             fastapi==0.115.0 \
             httpx==0.27.0 \
             prometheus-client==0.20.0 \
+            "psycopg[binary]==3.2.3" \
             pydantic==2.9.0 \
             pytest==8.3.0 \
+            sqlalchemy==2.0.36 \
             "uvicorn[standard]==0.30.0"
         working-directory: backend
 
       - name: Ejecutar pruebas del backend (pytest)
-        run: python -m pytest tests/ -v
+        run: python -m pytest tests/ -v -rs
         working-directory: backend
+        env:
+          XALD_TEST_DATABASE_URL: postgresql://xald:xald@localhost:5432/xald_test
 
   deploy-backend:
     needs: [build-and-test, backend-tests]

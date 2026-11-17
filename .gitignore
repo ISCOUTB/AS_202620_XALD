@@ -23,3 +23,6 @@ __pycache__/
 
 # Variables de entorno con secretos
 .env
+
+# Base de datos SQLite del backend en local
+backend/xald-local.db

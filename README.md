@@ -35,7 +35,7 @@ Además, el job `deploy-backend` del CI vuelve a consultar `/health` desde el ru
 
 ### 4. Cómo recrear el entorno desplegado
 1. Crear una cuenta en Render con GitHub (plan Free, no pide tarjeta — RO-03).
-2. **New → Blueprint** → repositorio `ISCOUTB/AS_202620_XALD`, rama `master`. Render lee `render.yaml` y crea el servicio `xald-backend`.
+2. **New → Blueprint** → repositorio `ISCOUTB/AS_202620_XALD`, rama `master`. Render lee `render.yaml` y crea el servicio `xald-backend` y la base Postgres `xald-db`; la variable `DATABASE_URL` se conecta sola ([ADR-0015](docs/adr/0015-persistencia-remota-postgres.md)).
 3. Cuando Render lo pida, cargar un valor propio para `XALD_API_KEY` (nunca en el repositorio).
 4. En Render → **Settings → Deploy Hook**, copiar la URL y guardarla en GitHub → **Settings → Secrets and variables → Actions** como `RENDER_DEPLOY_HOOK`.
 5. Hacer push a `master`: el CI corre las pruebas y, si pasan, el job `deploy-backend` despliega y verifica `/health`.
@@ -58,12 +58,30 @@ Cada evento se escribe como una línea JSON en la salida estándar (clase `Forma
 
 ### 8. Secretos fuera del código
 - Declarados sin valor en `.env.example`; el `.env` real está en `.gitignore`.
-- Leídos del entorno en `backend/app/main.py`: `os.environ.get("XALD_API_KEY")`.
+- Leídos del entorno en `backend/app/main.py`: `os.environ.get("XALD_API_KEY")`; la conexión a la base, `DATABASE_URL`, en `backend/app/db.py`. Render la inyecta desde `xald-db` (`fromDatabase` en `render.yaml`), nunca se escribe en el repositorio.
 - Valor cargado en Render → Environment; `render.yaml` lo declara con `sync: false`.
 - El CI usa `${{ secrets.RENDER_DEPLOY_HOOK }}` en el job `deploy-backend`, guardado en GitHub → Settings → Secrets → Actions.
 
 ### 9. Costo mensual
 $0/mes con el supuesto de 50 usuarios; volumen, costo por pieza y punto de ruptura de la capa gratuita en [arc42 §7.2](docs/arc42/07-Deployment%20View.md#72-costo-mensual).
+
+## 🗄️ Persistencia remota y conexión con la app (Corte 3)
+
+El backend guarda cada transacción en **PostgreSQL** (`xald-db` en Render) y aplica Last-Write-Wins sobre la base, así que el estado sobrevive a despliegues y a que Render duerma el servicio ([ADR-0015](docs/adr/0015-persistencia-remota-postgres.md)).
+
+| | |
+|---|---|
+| **Guardar** | `POST /api/v1/transacciones` → `202` (nueva, duplicada o conflicto resuelto) · `503` si la base no responde (la app reintenta) |
+| **Consultar** | `GET /api/v1/transacciones/{id}` con `X-API-Key` → la versión que el backend conserva |
+| **Pruebas** | `backend/tests/test_persistencia.py`; en CI corren contra un Postgres 16 real |
+| **Métrica nueva** | `xald_bd_errores_total` |
+
+**Conectar la app al backend desplegado.** En `XALDAPP/local.properties` (no se sube al repositorio):
+```properties
+XALD_API_URL=https://xald-backend.onrender.com
+XALD_API_KEY=<la misma clave cargada en Render → xald-backend → Environment>
+```
+Sin estas líneas la app apunta a `http://10.0.2.2:8000` (backend local visto desde el emulador). Después de cambiarlas: **Build → Rebuild Project** y reinstalar el APK.
 
 ## 📖 Guía de ejecución local
 Cómo correr las pruebas de los módulos Android, el corte vertical y el backend en local: ver [docs/guia-ejecucion-local.md](docs/guia-ejecucion-local.md).

@@ -1,63 +1,89 @@
 package com.proyecto.xald.syncqueue
 
+import android.content.Context
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
 import com.proyecto.xald.corefinanciero.PayloadSincronizacionDTO
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
-import java.util.UUID
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import java.util.concurrent.Executor
+import androidx.arch.core.executor.testing.InstantTaskExecutorRule
+import org.junit.Rule
 
-/**
- * Prueba manual extremo a extremo contra un backend real (no corre en CI).
- *
- *   cd backend && XALD_API_KEY=demo uvicorn app.main:app --port 8000 --no-access-log > backend.log
- *   XALD_URL_E2E=http://127.0.0.1:8000 XALD_API_KEY=demo ./gradlew :syncqueue:testDebugUnitTest
- *
- * Inyecta un fallo recuperable realista: el primer envío SÍ llega al backend, pero el cliente
- * "pierde" la respuesta (como un timeout). El reintento llega con el mismo X-Correlation-Id y
- * el backend lo registra como duplicado. Evidencia en docs/mensajes/evidencia.md.
- */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class ExtremoAExtremoManualTest {
+    @get:Rule
+    val instantTaskExecutorRule = InstantTaskExecutorRule()
+    private lateinit var db: SyncDatabase
 
-    private class PierdeLaPrimeraRespuesta(private val real: TransporteSincronizacion) : TransporteSincronizacion {
-        private var perdida = false
-        override fun enviar(mensaje: MensajeSincronizacion): ResultadoEnvio {
-            val resultado = real.enviar(mensaje)
-            if (!perdida && resultado == ResultadoEnvio.Confirmado) {
-                perdida = true
-                return ResultadoEnvio.FalloRecuperable("timeout (inyectado: respuesta perdida)")
-            }
-            return resultado
+    @After
+    fun tearDown() {
+        if (::db.isInitialized) {
+            db.close()
         }
     }
 
     @Test
-    fun envioConRespuestaPerdida_reintenta_yElBackendDeduplica() {
-        val url = System.getenv("XALD_URL_E2E")
-        assumeTrue("Define XALD_URL_E2E para correr esta prueba", !url.isNullOrBlank())
+    fun flujoCompleto_encolarProcesarYReintentar() {
+        val contexto: Context = ApplicationProvider.getApplicationContext()
+        var ahora = 1_000L
 
-        val cola = crearColaSincronizacionService(
-            transporte = PierdeLaPrimeraRespuesta(TransporteHttpSincronizacion(url!!, System.getenv("XALD_API_KEY") ?: "")),
-            politica = PoliticaReintentos(maxIntentos = 4, esperaBaseMs = 200, esperaMaximaMs = 2_000)
-        )
-        val payload = PayloadSincronizacionDTO(
-            idTransaccion = UUID.randomUUID().toString(),
-            monto = 45_900.0,
-            comercio = "Tienda Ara",
-            fechaTimestamp = System.currentTimeMillis(),
-            categoria = "Supermercado"
-        )
+        // Magia negra para Robolectric: Fuerza a Room a no crear ningún hilo en segundo plano
+        val executor = Executor { it.run() }
+        db = Room.inMemoryDatabaseBuilder(contexto, SyncDatabase::class.java)
+            .allowMainThreadQueries()
+            .setTransactionExecutor(executor)
+            .setQueryExecutor(executor)
+            .build()
 
-        cola.encolarTransaccion(payload)
-        cola.encolarTransaccion(payload) // el mismo SMS procesado dos veces
-
-        var confirmados = 0
-        val limite = System.currentTimeMillis() + 10_000
-        while (cola.obtenerCantidadPendientes() > 0 && System.currentTimeMillis() < limite) {
-            confirmados += cola.procesarPendientes().confirmados
-            Thread.sleep(50)
+        val transporte = object : TransporteSincronizacion {
+            var falloPrimeraVez = true
+            override fun enviar(mensaje: MensajeSincronizacion): ResultadoEnvio {
+                return if (falloPrimeraVez) {
+                    falloPrimeraVez = false
+                    ResultadoEnvio.FalloRecuperable("HTTP 500")
+                } else {
+                    ResultadoEnvio.Confirmado
+                }
+            }
         }
-        assertEquals(1, confirmados)
-        assertTrue(cola.obtenerFallidos().isEmpty())
+
+        // Instanciamos el servicio directamente sin la fábrica
+        val servicio = ColaSincronizacion(
+            dao = db.mensajeDao(),
+            transporte = transporte,
+            politica = PoliticaReintentos(maxIntentos = 3, esperaBaseMs = 1_000),
+            reloj = { ahora },
+            registro = { evento, campos -> println("E2E LOG: $evento $campos") },
+            generarIdCorrelacion = { java.util.UUID.randomUUID().toString() }
+        )
+
+        val payload = PayloadSincronizacionDTO(
+            idTransaccion = "tx-e2e-1",
+            monto = 15000.0,
+            comercio = "Exito",
+            fechaTimestamp = 1760000000000L
+        )
+
+        assertTrue(servicio.encolarTransaccion(payload))
+        assertEquals(1, servicio.obtenerCantidadPendientes())
+
+        // Intento 1: Falla y reprograma
+        val resumen1 = servicio.procesarPendientes()
+        assertEquals(1, resumen1.reprogramados)
+
+        // Avanzar tiempo para superar backoff
+        ahora += 1_500
+
+        // Intento 2: Confirma y limpia la cola
+        val resumen2 = servicio.procesarPendientes()
+        assertEquals(1, resumen2.confirmados)
+        assertEquals(0, servicio.obtenerCantidadPendientes())
     }
 }

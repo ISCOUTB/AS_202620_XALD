@@ -15,11 +15,17 @@ os.environ.setdefault("XALD_API_KEY", "clave-de-pruebas-ci")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import main  # noqa: E402
+from app import db, main, repositorio  # noqa: E402
 
 client = TestClient(main.app)
 CABECERAS = {"X-API-Key": os.environ["XALD_API_KEY"]}
 BASE = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+
+
+def fecha_guardada(id_transaccion):
+    """Versión que quedó guardada en la base de datos (antes: main.ultima_version en memoria)."""
+    with db.FabricaSesiones() as sesion:
+        return repositorio.fecha_vigente(sesion, id_transaccion)
 
 
 def transaccion(id_transaccion, fecha):
@@ -50,7 +56,7 @@ def test_version_reciente_gana_si_llega_despues():
     vieja, nueva = BASE, BASE + timedelta(minutes=5)
     enviar(id_tx, vieja)
     enviar(id_tx, nueva)
-    assert main.ultima_version[id_tx] == nueva
+    assert fecha_guardada(id_tx) == nueva
 
 
 def test_version_antigua_no_sobrescribe_a_la_reciente():
@@ -59,7 +65,7 @@ def test_version_antigua_no_sobrescribe_a_la_reciente():
     vieja, nueva = BASE, BASE + timedelta(minutes=5)
     enviar(id_tx, nueva)
     enviar(id_tx, vieja)
-    assert main.ultima_version[id_tx] == nueva
+    assert fecha_guardada(id_tx) == nueva
 
 
 def test_primera_version_no_cuenta_como_conflicto():
@@ -84,7 +90,7 @@ def test_medicion_esc05_30_transacciones_en_conflicto():
         orden = (nueva, vieja) if i % 2 == 0 else (vieja, nueva)
         for fecha in orden:
             aceptadas += enviar(id_tx, fecha).status_code == 202
-        correctas += main.ultima_version[id_tx] == nueva
+        correctas += fecha_guardada(id_tx) == nueva
 
     resueltos = conflictos_resueltos() - antes
     perdidas = 2 * carga - aceptadas
@@ -119,7 +125,7 @@ def test_mf03_reenvio_identico_es_idempotente_y_no_cuenta_como_conflicto():
 
     assert primera.status_code == reenvio.status_code == 202
     assert reenvio.json()["estado"] == "ACEPTADO"
-    assert main.ultima_version[id_tx] == BASE
+    assert fecha_guardada(id_tx) == BASE
     assert contador("xald_sync_duplicados_total") == duplicados_antes + 1
     assert contador("xald_sync_conflictos_resueltos_total") == conflictos_antes
 

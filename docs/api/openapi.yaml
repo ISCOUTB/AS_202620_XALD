@@ -5,7 +5,7 @@ info:
     API REST asíncrona para la recepción de transacciones financieras procesadas
     por el cliente móvil bajo una arquitectura Offline-First. Garantiza la ingesta
     higienizada de datos provenientes de la capa Anti-Corrupción (ACL / Regex / Gemini).
-  version: 1.0.0
+  version: 1.1.0
   contact:
     name: Equipo de Desarrollo XALD
   license:
@@ -91,14 +91,52 @@ paths:
             permanente: el cliente no reintenta y manda el mensaje a su cola de fallidos.
         '401':
           description: API key ausente o inválida. Error permanente para el cliente.
+        '411':
+          description: >
+            Falta la cabecera Content-Length (amenaza AM-08, docs/seguridad/modelo-amenazas.md).
+            Error permanente para el cliente.
+        '413':
+          description: >
+            Cuerpo mayor a 16 KB (amenaza AM-08). Una transacción válida ocupa menos de 1 KB.
+            Error permanente para el cliente.
         '422':
           description: >
-            El cuerpo no cumple el contrato (falta un campo obligatorio, tipo incorrecto, monto <= 0).
+            El cuerpo no cumple el contrato (falta un campo obligatorio, tipo incorrecto, monto <= 0)
+            o fecha_transaccion está más de 5 minutos en el futuro (amenaza AM-07).
             Error permanente para el cliente.
         '503':
           description: >
-            Servicio no disponible (por ejemplo, Render despertando). Error recuperable: el
-            cliente reintenta con espera exponencial.
+            Servicio o base de datos no disponible (por ejemplo, Render despertando o el
+            Postgres reiniciándose). Error recuperable: el cliente reintenta con espera
+            exponencial y la transacción no se pierde.
+
+  /api/v1/transacciones/{id_transaccion}:
+    get:
+      summary: Consultar la versión que el backend conserva de una transacción
+      description: >
+        Devuelve la transacción tal como quedó guardada después de aplicar Last-Write-Wins
+        (ADR-0011, ADR-0015). Sirve para verificar desde fuera que la sincronización llegó.
+      operationId: consultarTransaccion
+      parameters:
+        - name: id_transaccion
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Transacción encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransaccionGuardada'
+        '401':
+          description: API key ausente o inválida.
+        '404':
+          description: El backend no tiene ninguna transacción con ese id.
+        '503':
+          description: Base de datos no disponible.
 
 components:
   securitySchemes:
@@ -190,10 +228,50 @@ components:
           format: uuid
         mensaje:
           type: string
-          example: Transacción recibida y encolada exitosamente para persistencia.
+          example: Transacción recibida y guardada.
         fecha_recepcion:
           type: string
           format: date-time
+
+    TransaccionGuardada:
+      type: object
+      required:
+        - id_transaccion
+        - monto
+        - moneda
+        - comercio
+        - categoria
+        - fecha_transaccion
+        - origen_datos
+        - recibida_en
+        - actualizada_en
+      properties:
+        id_transaccion:
+          type: string
+          format: uuid
+        monto:
+          type: number
+        moneda:
+          type: string
+          example: COP
+        comercio:
+          type: string
+        categoria:
+          type: string
+        fecha_transaccion:
+          type: string
+          format: date-time
+          description: Versión vigente según Last-Write-Wins.
+        origen_datos:
+          $ref: '#/components/schemas/OrigenDatosEnum'
+        recibida_en:
+          type: string
+          format: date-time
+          description: Hora del servidor en que llegó la primera versión.
+        actualizada_en:
+          type: string
+          format: date-time
+          description: Hora del servidor en que una versión más reciente ganó por última vez.
 
     OrigenDatosEnum:
       type: string

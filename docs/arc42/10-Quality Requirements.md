@@ -66,9 +66,31 @@ Cada escenario sigue las seis partes que exige arc42: fuente, estímulo, artefac
 | **Artefacto** | Data & Sync Module (Sync Queue) y Backend XALD (motor LWW) |
 | **Entorno** | Restablecimiento de la conexión en ambos dispositivos |
 | **Respuesta** | Se aplica la política Last-Write-Wins tomando la marca de tiempo más reciente, sin duplicar ni sobrescribir saldos |
-| **Medida** | **Umbral:** 100 % de conflictos resueltos automáticamente, 0 transacciones distintas perdidas · **Carga:** 30 transacciones en conflicto simultáneo · **Herramienta:** dos emuladores con relojes sincronizados, verificación por comparación de estado final contra el esperado |
+| **Medida** | **Umbral:** 100 % de conflictos resueltos automáticamente, 0 transacciones distintas perdidas · **Carga:** 30 transacciones en conflicto simultáneo · **Herramienta:** script `backend/scripts/medir_esc05.py` (cliente HTTP que simula dos dispositivos) y prueba `test_medicion_esc05_30_transacciones_en_conflicto`; verificación por conteo de la métrica `xald_sync_conflictos_resueltos_total` y por estado final |
 
 **Objetivo de calidad:** 4 (Consistencia eventual) · **Objetivo de negocio:** OB-02 · **Restricción:** RT-05
+
+**Medición:** [docs/medicion-esc05.md](../medicion-esc05.md)
+
+#### Entorno de la medición de ESC-05
+
+La medición se hizo contra el **Backend XALD desplegado**, no en local.
+
+| Aspecto | Declaración |
+|---|---|
+| **Sistema medido** | Backend XALD en Render (Web Service Docker, plan Free, región Oregon), `https://xald-backend.onrender.com` ([ADR-0008](../adr/0008-plataforma-de-despliegue.md)). |
+| **Quién mide** | `backend/scripts/medir_esc05.py`, ejecutado desde [completar: equipo, sistema operativo, versión de Python y red desde donde se corrió]. |
+| **Fecha** | [completar: la línea `Fecha (UTC)` que imprime el script en la corrida que se reporta]. |
+| **Preparación** | El script llama a `GET /health` antes de empezar para despertar el servicio (Render Free duerme tras 15 min sin tráfico). Lee el contador `xald_sync_conflictos_resueltos_total` de `/metrics` antes y después, y el resultado es la diferencia. |
+| **Estado del servidor** | `ultima_version` vive en memoria y empieza vacío en cada arranque. Si Render reinicia el servicio en medio de la corrida, el contador vuelve a cero y la diferencia sale mal; en ese caso se repite la corrida. |
+| **Repeticiones** | [completar: cuántas corridas se hicieron y cuál se reporta]. |
+| **Prueba local complementaria** | `test_medicion_esc05_30_transacciones_en_conflicto` en `backend/tests/test_lww.py` usa `TestClient`, es decir, corre en local (también en el CI) y no sale por red. No reemplaza la medición desplegada. |
+
+**Diferencias frente a lo que declara el escenario arriba:**
+
+* La herramienta prevista originalmente eran dos emuladores con relojes sincronizados. La medición usó **un solo cliente HTTP** que hace de los dos dispositivos: envía dos versiones del mismo UUID, alternando cuál llega primero.
+* La carga del escenario era de 30 conflictos simultáneos. El script los envía **uno tras otro** (60 envíos).
+* Por lo anterior, esta medición verifica la regla LWW del backend, pero **no verifica relojes reales de dos dispositivos**, que sigue siendo el riesgo abierto de ESC-05 (ver [Sección 11](11-Risks%20and%20Technical%20Debts.md)). 
 
 ## Árbol de utilidad
 
