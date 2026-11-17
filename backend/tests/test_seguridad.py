@@ -18,7 +18,7 @@ os.environ.setdefault("XALD_API_KEY", "clave-de-pruebas-ci")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import main  # noqa: E402
+from app import db, main, repositorio  # noqa: E402
 
 client = TestClient(main.app)
 URL = "/api/v1/transacciones"
@@ -76,7 +76,8 @@ def test_am07_fecha_dentro_de_la_tolerancia_se_acepta():
 def test_am07_fecha_futura_no_entra_al_estado_lww():
     t = transaccion(datetime.now(timezone.utc) + timedelta(days=30))
     client.post(URL, json=t, headers={"X-API-Key": os.environ["XALD_API_KEY"]})
-    assert t["id_transaccion"] not in main.ultima_version
+    with db.FabricaSesiones() as sesion:
+        assert repositorio.fecha_vigente(sesion, t["id_transaccion"]) is None
 
 
 # --- AM-08: cuerpo sin límite --------------------------------------------------

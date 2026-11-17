@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -16,6 +17,8 @@ from sqlalchemy.orm import Session
 from app import db, repositorio
 from app.dtos import RespuestaSincronizacion, TransaccionDTO, TransaccionGuardada
 from app.repositorio import Resultado
+
+TAMANO_MAXIMO_CUERPO_BYTES = 16 * 1024  # AM-08: 16 KB máximo por petición
 
 
 # ---------------------------------------------------------------------------
@@ -68,18 +71,29 @@ ERRORES_BD = Counter(
 
 
 # ---------------------------------------------------------------------------
-# Seguridad: la llave se toma del entorno, nunca del código
+# Seguridad (AM-01): soporta rotación con XALD_API_KEYS (lista separada por comas)
+# y mantiene compatibilidad con XALD_API_KEY única.
 # ---------------------------------------------------------------------------
+def _llaves_vigentes() -> list[str]:
+    llaves = []
+    for k in os.environ.get("XALD_API_KEYS", "").split(","):
+        limpia = k.strip()
+        if limpia:
+            llaves.append(limpia)
+    unica = os.environ.get("XALD_API_KEY", "").strip()
+    if unica and unica not in llaves:
+        llaves.append(unica)
+    return llaves
+
+
 def verificar_llave(llave: str = Header(default="", alias="X-API-Key")):
-    esperada = os.environ.get("XALD_API_KEY", "")
-    if not esperada or not hmac.compare_digest(llave, esperada):
+    vigentes = _llaves_vigentes()
+    if not vigentes or not any(hmac.compare_digest(llave, esperada) for esperada in vigentes):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key inválida")
 
 
 # ---------------------------------------------------------------------------
 # Contrato del mensaje (docs/mensajes/README.md): versión mayor que este consumidor entiende.
-# Un cambio compatible NO sube esta versión; uno incompatible sí, y el consumidor viejo lo
-# rechaza con 400 para que el cliente lo mande a su cola de fallidos en vez de reintentar.
 # ---------------------------------------------------------------------------
 VERSIONES_ESQUEMA_SOPORTADAS = {"1"}
 
@@ -93,8 +107,7 @@ def verificar_version_esquema(version: str = Header(default="1", alias="X-Versio
 
 
 # ---------------------------------------------------------------------------
-# Persistencia remota (ADR-0015): la versión vigente de cada transacción vive en la BD,
-# no en memoria, así que Last-Write-Wins sobrevive a despliegues y a que Render duerma.
+# Persistencia remota (ADR-0015): la versión vigente de cada transacción vive en la BD.
 # ---------------------------------------------------------------------------
 tablas_listas = False
 
@@ -108,8 +121,6 @@ def asegurar_tablas():
 
 @asynccontextmanager
 async def ciclo_de_vida(_app):
-    # Si la BD no responde al arrancar, el servicio igual sube (el health check de Render
-    # no depende de la BD) y las tablas se crean en la primera petición que la necesite.
     try:
         asegurar_tablas()
         registrar("bd_lista", motor=db.motor.dialect.name)
@@ -133,8 +144,6 @@ def obtener_sesion():
 def _bd_no_disponible(error):
     ERRORES_BD.inc()
     logger.error("bd_no_disponible", extra={"campos": {"error": error.__class__.__name__}})
-    # 503 es recuperable para el cliente (clasificarRespuestaHttp en :syncqueue): reintenta con
-    # espera exponencial y la transacción no se pierde.
     return HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail="Base de datos no disponible, reintente más tarde.",
@@ -149,9 +158,25 @@ app = FastAPI(
 
 
 @app.middleware("http")
+async def limitar_tamano_cuerpo(request: Request, call_next):
+    # AM-08: rechazar cuerpos mayores a 16 KB con 413 antes de parsear JSON o tocar la BD
+    content_length = request.headers.get("content-length")
+    if content_length and content_length.isdigit() and int(content_length) > TAMANO_MAXIMO_CUERPO_BYTES:
+        return JSONResponse(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            content={"detail": "El cuerpo de la petición excede el límite máximo de 16 KB."},
+        )
+    cuerpo = await request.body()
+    if len(cuerpo) > TAMANO_MAXIMO_CUERPO_BYTES:
+        return JSONResponse(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            content={"detail": "El cuerpo de la petición excede el límite máximo de 16 KB."},
+        )
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def registrar_peticion(request: Request, call_next):
-    # Trazabilidad productor -> consumidor: el cliente manda X-Correlation-Id (estable entre
-    # reintentos); si no llega, se genera uno para no perder la traza de esta petición.
     id_correlacion = request.headers.get("X-Correlation-Id") or str(uuid.uuid4())
     request.state.id_correlacion = id_correlacion
     inicio = time.perf_counter()
@@ -191,8 +216,6 @@ async def metrics():
     dependencies=[Depends(verificar_llave), Depends(verificar_version_esquema)],
 )
 def registrar_transaccion(transaccion: TransaccionDTO, request: Request, sesion: Session = Depends(obtener_sesion)):
-    # Función síncrona a propósito: FastAPI la corre en su pool de hilos y la consulta a la BD
-    # no bloquea el event loop.
     id_correlacion = request.state.id_correlacion
     TRANSACCIONES_RECIBIDAS.labels(origen_datos=transaccion.origen_datos.value).inc()
 
@@ -202,8 +225,6 @@ def registrar_transaccion(transaccion: TransaccionDTO, request: Request, sesion:
         sesion.rollback()
         raise _bd_no_disponible(e)
 
-    # Idempotencia (arc42 §8, MF-03): un reenvío idéntico (mismo id y misma fecha)
-    # no es un conflicto. Se responde igual que la primera vez y no cambia el estado.
     if resultado is Resultado.DUPLICADO:
         DUPLICADOS.inc()
         registrar(

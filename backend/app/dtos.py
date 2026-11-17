@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pydantic import BaseModel, Field, field_validator
 
@@ -20,11 +20,13 @@ class TransaccionDTO(BaseModel):
 
     @field_validator("fecha_transaccion", mode="after")
     @classmethod
-    def normalizar_utc(cls, v: datetime) -> datetime:
+    def validar_y_normalizar_utc(cls, v: datetime) -> datetime:
         # Si la fecha no trae zona horaria, asume UTC para evitar TypeErrors al comparar
-        if v.tzinfo is None:
-            return v.replace(tzinfo=timezone.utc)
-        return v.astimezone(timezone.utc)
+        fecha_utc = v.replace(tzinfo=timezone.utc) if v.tzinfo is None else v.astimezone(timezone.utc)
+        # AM-07: rechazar fechas futuras más allá de 5 minutos de tolerancia por desfase de reloj
+        if fecha_utc > datetime.now(timezone.utc) + timedelta(minutes=5):
+            raise ValueError("fecha_transaccion no puede estar en el futuro (tolerancia máxima: 5 minutos)")
+        return fecha_utc
 
 
 class RespuestaSincronizacion(BaseModel):
