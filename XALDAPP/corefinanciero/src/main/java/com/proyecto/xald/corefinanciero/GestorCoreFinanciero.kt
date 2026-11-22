@@ -1,9 +1,8 @@
 package com.proyecto.xald.corefinanciero
 
-import java.util.UUID
-
 internal class GestorCoreFinanciero(
-    private val dao: TransaccionDao
+    private val dao: TransaccionDao,
+    private val planificacion: PlanificacionDao
 ) : InformacionFinanciera {
 
     override fun guardarTransaccion(monto: Double, comercio: String): Boolean {
@@ -17,7 +16,8 @@ internal class GestorCoreFinanciero(
         categoria: String,
         origenDatos: String,
         fechaTimestamp: Long,
-        idTransaccion: String
+        idTransaccion: String,
+        tipoMovimiento: String
     ): Boolean {
         // NaN <= 0.0 es false, por eso se comprueba aparte que el monto sea finito.
         if (monto <= 0.0 || !monto.isFinite()) return false
@@ -31,7 +31,9 @@ internal class GestorCoreFinanciero(
             categoria = categoria,
             fechaTimestamp = fechaTimestamp,
             origenDatos = origenDatos,
-            sincronizado = false
+            sincronizado = false,
+            // Se guarda normalizado: un código desconocido queda como GASTO.
+            tipoMovimiento = TipoMovimiento.desdeCodigo(tipoMovimiento).name
         )
         // insertar() devuelve -1 si el id ya existe (OnConflictStrategy.IGNORE).
         return dao.insertar(nuevaEntidad) != -1L
@@ -39,6 +41,10 @@ internal class GestorCoreFinanciero(
 
     override fun obtenerUltimaTransaccion(): TransaccionEntidad? {
         return dao.obtenerUltimaTransaccion()
+    }
+
+    override fun obtenerTransaccion(idTransaccion: String): TransaccionEntidad? {
+        return dao.obtenerPorId(idTransaccion)
     }
 
     override fun obtenerPendientesSincronizacion(): List<PayloadSincronizacionDTO> {
@@ -63,6 +69,10 @@ internal class GestorCoreFinanciero(
         return dao.obtenerSaldoTotal()
     }
 
+    override fun obtenerConsolidado(): Consolidado {
+        return AnaliticaFinanciera.consolidar(dao.obtenerTodas(), planificacion.obtenerSaldoBase())
+    }
+
     override fun marcarComoSincronizada(idTransaccion: String): Boolean {
         return dao.marcarComoSincronizado(idTransaccion) > 0
     }
@@ -71,5 +81,42 @@ internal class GestorCoreFinanciero(
         val limpia = categoria.trim()
         if (limpia.isEmpty()) return false
         return dao.actualizarCategoria(idTransaccion, limpia) > 0
+    }
+
+    override fun reclasificarMovimiento(idTransaccion: String, tipoMovimiento: String, categoria: String): Boolean {
+        val tipo = TipoMovimiento.desdeCodigo(tipoMovimiento)
+        val categoriaFinal = CategoriasEspeciales.paraTipo(tipo, categoria)
+        return dao.reclasificar(idTransaccion, tipo.name, categoriaFinal) > 0
+    }
+
+    override fun obtenerSaldoBase(): SaldoBaseEntidad? {
+        return planificacion.obtenerSaldoBase()
+    }
+
+    override fun establecerSaldoBase(monto: Double, fechaTimestamp: Long): Boolean {
+        if (!monto.isFinite()) return false
+        planificacion.guardarSaldoBase(SaldoBaseEntidad(monto = monto, fechaTimestamp = fechaTimestamp))
+        return true
+    }
+
+    override fun obtenerPresupuestos(): List<PresupuestoEntidad> {
+        return planificacion.obtenerPresupuestos()
+    }
+
+    override fun guardarPresupuesto(presupuesto: PresupuestoEntidad): Boolean {
+        val categoria = presupuesto.categoria.trim()
+        if (categoria.isEmpty()) return false
+        if (presupuesto.limite <= 0.0 || !presupuesto.limite.isFinite()) return false
+        planificacion.guardarPresupuesto(
+            presupuesto.copy(
+                categoria = categoria,
+                periodo = PeriodoPresupuesto.desdeCodigo(presupuesto.periodo).name
+            )
+        )
+        return true
+    }
+
+    override fun eliminarPresupuesto(categoria: String): Boolean {
+        return planificacion.eliminarPresupuesto(categoria.trim()) > 0
     }
 }

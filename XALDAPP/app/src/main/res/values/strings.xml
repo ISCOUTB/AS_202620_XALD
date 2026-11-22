@@ -1,3 +1,57 @@
 <resources>
     <string name="app_name">XALD</string>
+
+    <!-- Navegación -->
+    <string name="tab_inicio">Inicio</string>
+    <string name="tab_movimientos">Movimientos</string>
+    <string name="tab_presupuestos">Presupuestos</string>
+    <string name="accion_agregar">Agregar</string>
+    <string name="accion_privacidad">Ocultar o mostrar saldos</string>
+    <string name="accion_sincronizar">Sincronizar ahora</string>
+
+    <!-- Inicio -->
+    <string name="saldo_disponible">Saldo disponible</string>
+    <string name="ajustar_saldo">Ajustar saldo</string>
+    <string name="periodo_semana">Semana</string>
+    <string name="periodo_mes">Mes</string>
+    <string name="periodo_anio">Año</string>
+    <string name="titulo_flujo">Entradas vs. salidas</string>
+    <string name="entradas">Entradas</string>
+    <string name="salidas">Salidas</string>
+    <string name="titulo_evolucion">Evolución</string>
+    <string name="titulo_categorias">Gastos por categoría</string>
+    <string name="sin_gastos_periodo">No hay gastos en este periodo.</string>
+    <string name="titulo_presupuestos">Presupuestos</string>
+    <string name="ver_todos">Ver todos</string>
+    <string name="sin_presupuestos_inicio" formatted="false">Ponte un tope de gasto y XALD te avisa al 80 % y al 90 %. Toca aquí para crear uno.</string>
+    <string name="titulo_sincronizacion">Sincronización</string>
+
+    <!-- Movimientos -->
+    <string name="buscar_hint">Buscar comercio, categoría o monto</string>
+    <string name="vacio_movimientos">No hay movimientos con estos filtros.</string>
+
+    <!-- Presupuestos -->
+    <string name="presupuestos_titulo">Topes de gasto</string>
+    <string name="presupuestos_explicacion" formatted="false">Define cuánto quieres gastar por categoría o en total. Las barras pasan de verde a rojo a medida que te acercas al tope, y XALD te avisa al llegar al 80 % y al 90 %.</string>
+    <string name="nuevo_presupuesto">Nuevo presupuesto</string>
+    <string name="vacio_presupuestos">Todavía no tienes presupuestos.</string>
+
+    <!-- Diálogos -->
+    <string name="tipo_gasto">Gasto</string>
+    <string name="tipo_ingreso">Ingreso</string>
+    <string name="tipo_envie">Envié</string>
+    <string name="tipo_recibi">Recibí</string>
+    <string name="monto_hint">$ 0</string>
+    <string name="descripcion_hint">¿En qué fue? (ej. Almuerzo)</string>
+    <string name="etiqueta_monto">Monto</string>
+    <string name="etiqueta_descripcion">Descripción</string>
+    <string name="etiqueta_categoria">Categoría</string>
+    <string name="etiqueta_fecha">Fecha</string>
+    <string name="etiqueta_tipo">Tipo</string>
+    <string name="etiqueta_limite">Límite</string>
+    <string name="etiqueta_periodo">Periodo</string>
+    <string name="periodo_mensual">Mensual</string>
+    <string name="periodo_semanal">Semanal</string>
+    <string name="saldo_explicacion">Escribe cuánto dinero tienes hoy en total. Desde ahora XALD parte de ese valor y le suma o resta los movimientos nuevos. Úsalo cuando empieces a usar la app o cuando el saldo no cuadre (un SMS que no llegó, una compra en efectivo…).</string>
+    <string name="saldo_hint">Tu saldo actual</string>
 </resources>

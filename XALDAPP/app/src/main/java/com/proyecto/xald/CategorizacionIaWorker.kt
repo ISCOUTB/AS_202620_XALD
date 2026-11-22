@@ -77,6 +77,7 @@ class CategorizacionIaWorker(
         }
 
         if (huboActualizaciones) {
+            NotificadorPresupuestos.revisar(applicationContext, coreFinanciero)
             NotificadorCambios.avisar()
             ProgramadorSincronizacion.solicitarEnvioInmediato(applicationContext)
         }
@@ -104,4 +105,4 @@ class CategorizacionIaWorker(
             )
         }
     }
-}
+}

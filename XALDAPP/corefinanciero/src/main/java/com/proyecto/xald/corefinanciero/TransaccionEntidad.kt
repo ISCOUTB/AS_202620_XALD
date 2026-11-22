@@ -32,5 +32,21 @@ data class TransaccionEntidad(
     val origenDatos: String = "SMS_REGEX",
 
     @ColumnInfo(name = "sincronizado")
-    val sincronizado: Boolean = false
+    val sincronizado: Boolean = false,
+
+    /**
+     * Código de [TipoMovimiento] (GASTO, INGRESO, TRANSFERENCIA_ENVIADA, TRANSFERENCIA_RECIBIDA).
+     * Es nullable a propósito: las filas creadas antes de la versión 2 de la base no lo tienen y
+     * eran todas compras, así que `null` se lee como GASTO (ver [tipo]).
+     */
+    @ColumnInfo(name = "tipo_movimiento")
+    val tipoMovimiento: String? = null
 )
+
+/** Tipo del movimiento ya resuelto (las filas antiguas sin tipo se leen como GASTO). */
+val TransaccionEntidad.tipo: TipoMovimiento
+    get() = TipoMovimiento.desdeCodigo(tipoMovimiento)
+
+/** SMS (reglas o IA) o ingresado a mano por el usuario. */
+val TransaccionEntidad.origen: OrigenMovimiento
+    get() = OrigenMovimiento.desdeCodigo(origenDatos)

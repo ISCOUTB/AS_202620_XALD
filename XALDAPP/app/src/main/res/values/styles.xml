@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Tarjetas y textos -->
+    <style name="Xald.Tarjeta" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">12dp</item>
+        <item name="android:background">@drawable/fondo_tarjeta</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:padding">18dp</item>
+    </style>
+
+    <style name="Xald.TituloSeccion" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/xald_texto</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="Xald.Leyenda" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/xald_texto_secundario</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="Xald.Enlace" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/fondo_boton_suave</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingTop">6dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingBottom">6dp</item>
+        <item name="android:textColor">@color/xald_marca</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <style name="Xald.BotonPrincipal" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:background">@drawable/fondo_boton_principal</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">@color/xald_superficie</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <!-- Chips de filtro y opciones -->
+    <style name="Xald.Chip" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">36dp</item>
+        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:background">@drawable/fondo_chip</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">14dp</item>
+        <item name="android:paddingEnd">14dp</item>
+        <item name="android:textColor">@color/selector_texto_chip</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <style name="Xald.Segmento" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">36dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:background">@drawable/fondo_segmento</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">@color/selector_texto_segmento</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <!-- Campos de formulario -->
+    <style name="Xald.Campo" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">6dp</item>
+        <item name="android:background">@drawable/fondo_campo</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:paddingStart">14dp</item>
+        <item name="android:paddingEnd">14dp</item>
+        <item name="android:textColor">@color/xald_texto</item>
+        <item name="android:textColorHint">@color/xald_texto_terciario</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <style name="Xald.EtiquetaCampo" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">14dp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/xald_texto_secundario</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <!-- Navegación inferior -->
+    <style name="Xald.Tab" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:background">@drawable/fondo_tab</item>
+        <item name="android:gravity">center</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="Xald.Tab.Icono" parent="">
+        <item name="android:layout_width">24dp</item>
+        <item name="android:layout_height">24dp</item>
+        <item name="android:duplicateParentState">true</item>
+        <item name="tint">@color/selector_navegacion</item>
+    </style>
+
+    <style name="Xald.Tab.Texto" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:duplicateParentState">true</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/selector_navegacion</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+</resources>

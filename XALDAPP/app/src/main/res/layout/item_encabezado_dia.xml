@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:paddingStart="12dp"
+    android:paddingTop="16dp"
+    android:paddingEnd="12dp"
+    android:paddingBottom="4dp">
+
+    <TextView
+        android:id="@+id/tvDia"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:fontFamily="sans-serif-medium"
+        android:letterSpacing="0.06"
+        android:textAllCaps="true"
+        android:textColor="@color/xald_texto_terciario"
+        android:textSize="11sp" />
+
+    <TextView
+        android:id="@+id/tvTotalDia"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/xald_texto_terciario"
+        android:textSize="11sp" />
+</LinearLayout>

@@ -8,6 +8,7 @@ import com.proyecto.xald.syncqueue.ColaSincronizacionProvider
 import com.proyecto.xald.syncqueue.ProgramadorSincronizacion
 import com.proyecto.xald.syncqueue.TransporteHttpSincronizacion
 import com.proyecto.xald.syncqueue.crearColaSincronizacionService
+import com.proyecto.xald.ui.PreferenciasXald
 import kotlin.concurrent.thread
 
 class XaldApplication : Application() {
@@ -31,11 +32,14 @@ class XaldApplication : Application() {
             // Cuando el backend confirma un mensaje, la transacción pasa a "sincronizada" en el core.
             alConfirmar = { payload ->
                 coreFinanciero.marcarComoSincronizada(payload.idTransaccion)
+                PreferenciasXald.registrarSincronizacion(this)
                 NotificadorCambios.avisar()
             }
         )
 
         ColaSincronizacionProvider.instalar(colaSync)
+        // Canal de las alertas de presupuesto (80 %, 90 %, 100 %).
+        NotificadorPresupuestos.crearCanal(this)
         ProgramadorSincronizacion.programarPeriodica(this)
 
         // Red de seguridad "al menos una vez": si el proceso murió entre guardar una transacción

@@ -1,5 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.XALD" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Tema de la app: AppCompat sin barra de acción (la barra superior es propia). -->
+    <style name="Theme.XALD" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">@color/xald_marca</item>
+        <item name="colorPrimaryDark">@color/xald_fondo</item>
+        <item name="colorAccent">@color/xald_marca</item>
+        <item name="colorControlNormal">@color/xald_texto_terciario</item>
+        <item name="android:windowBackground">@color/xald_fondo</item>
+        <item name="android:statusBarColor">@color/xald_fondo</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="alertDialogTheme">@style/Theme.XALD.Dialogo</item>
+    </style>
+
+    <!-- Diálogos con esquinas redondeadas y botones del color de la marca. -->
+    <style name="Theme.XALD.Dialogo" parent="ThemeOverlay.AppCompat.Dialog.Alert">
+        <item name="colorAccent">@color/xald_marca</item>
+        <item name="android:windowBackground">@drawable/fondo_dialogo</item>
+    </style>
 </resources>

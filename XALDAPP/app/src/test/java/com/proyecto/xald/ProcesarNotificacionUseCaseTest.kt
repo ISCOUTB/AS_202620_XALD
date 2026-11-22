@@ -3,8 +3,11 @@ package com.proyecto.xald
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.proyecto.xald.aigemini.crearServicioCategorizacionConRespaldo
+import com.proyecto.xald.corefinanciero.CategoriasEspeciales
 import com.proyecto.xald.corefinanciero.InformacionFinanciera
+import com.proyecto.xald.corefinanciero.TipoMovimiento
 import com.proyecto.xald.corefinanciero.crearInformacionFinanciera
+import com.proyecto.xald.corefinanciero.tipo
 import com.proyecto.xald.parser.crearServicioParser
 import com.proyecto.xald.syncqueue.ColaSincronizacionService
 import com.proyecto.xald.syncqueue.crearColaSincronizacionService
@@ -120,5 +123,28 @@ class ProcesarNotificacionUseCaseTest {
 
         assertFalse(resultado)
         assertEquals(0, coreFinanciero.obtenerHistorial().size)
+    }
+
+    @Test
+    fun transferenciaRecibida_seGuardaConSuTipo_yCategoriaTransferencias() = runTest {
+        val sms = "Bancolombia: Recibiste una transferencia por \$100,000.00 de JUAN PEREZ en tu cuenta *1234 el 10/11/2026."
+        assertTrue(useCase.ejecutar("890900", sms))
+
+        val guardada = coreFinanciero.obtenerUltimaTransaccion()
+        assertEquals(TipoMovimiento.TRANSFERENCIA_RECIBIDA, guardada?.tipo)
+        assertEquals(CategoriasEspeciales.TRANSFERENCIAS, guardada?.categoria)
+        assertEquals("JUAN PEREZ", guardada?.comercio)
+        // Se sincroniza igual que una compra.
+        assertEquals(1, syncQueue.obtenerCantidadPendientes())
+    }
+
+    @Test
+    fun nomina_seGuardaComoIngreso() = runTest {
+        val sms = "Bancolombia le informa Pago de Nomina de EMPRESA SAS por \$2,500,000.00 en su cuenta *1234 10/11/2026."
+        assertTrue(useCase.ejecutar("890900", sms))
+
+        val guardada = coreFinanciero.obtenerUltimaTransaccion()
+        assertEquals(TipoMovimiento.INGRESO, guardada?.tipo)
+        assertEquals(CategoriasEspeciales.INGRESOS, guardada?.categoria)
     }
 }

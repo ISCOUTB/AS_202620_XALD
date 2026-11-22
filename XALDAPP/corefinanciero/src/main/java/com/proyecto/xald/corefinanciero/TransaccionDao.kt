@@ -25,6 +25,9 @@ internal interface TransaccionDao {
     @Query("SELECT * FROM transacciones ORDER BY fecha_timestamp DESC")
     fun obtenerTodas(): List<TransaccionEntidad>
 
+    @Query("SELECT * FROM transacciones WHERE id_transaccion = :idTransaccion LIMIT 1")
+    fun obtenerPorId(idTransaccion: String): TransaccionEntidad?
+
     @Query("SELECT COALESCE(SUM(monto), 0.0) FROM transacciones")
     fun obtenerSaldoTotal(): Double
 
@@ -33,4 +36,10 @@ internal interface TransaccionDao {
 
     @Query("UPDATE transacciones SET categoria = :nuevaCategoria WHERE id_transaccion = :idTransaccion")
     fun actualizarCategoria(idTransaccion: String, nuevaCategoria: String): Int
+
+    @Query(
+        "UPDATE transacciones SET categoria = :nuevaCategoria, tipo_movimiento = :nuevoTipo " +
+            "WHERE id_transaccion = :idTransaccion"
+    )
+    fun reclasificar(idTransaccion: String, nuevoTipo: String, nuevaCategoria: String): Int
 }

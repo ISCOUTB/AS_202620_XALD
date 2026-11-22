@@ -82,7 +82,9 @@ class SmsReceiver : BroadcastReceiver() {
                     ProgramadorSincronizacion.solicitarEnvioInmediato(appContext)
                     // 2. Programa a Gemini en segundo plano para las que quedaron "Sin Categorizar".
                     CategorizacionIaWorker.programar(appContext)
-                    // 3. Refresca la UI al instante.
+                    // 3. Alertas de presupuesto si el gasto cruzó el 80 %, 90 % o 100 %.
+                    NotificadorPresupuestos.revisar(appContext)
+                    // 4. Refresca la UI al instante.
                     NotificadorCambios.avisar()
                 }
             } catch (e: Exception) {
@@ -93,4 +95,4 @@ class SmsReceiver : BroadcastReceiver() {
             }
         }
     }
-}
+}

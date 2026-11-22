@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Plantilla original de Android Studio (se conservan por si algo las usa). -->
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>
@@ -7,4 +8,26 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Paleta XALD -->
+    <color name="xald_fondo">#F3F4F8</color>
+    <color name="xald_superficie">#FFFFFF</color>
+    <color name="xald_borde">#E9EAF0</color>
+    <color name="xald_separador">#F0F1F5</color>
+    <color name="xald_texto">#101828</color>
+    <color name="xald_texto_secundario">#667085</color>
+    <color name="xald_texto_terciario">#98A2B3</color>
+    <color name="xald_marca">#6C5CE7</color>
+    <color name="xald_marca_oscuro">#5443D6</color>
+    <color name="xald_marca_suave">#F0EDFF</color>
+    <color name="xald_marca_texto">#3E2F9E</color>
+    <color name="xald_entrada">#12B76A</color>
+    <color name="xald_salida">#F04438</color>
+    <color name="xald_alerta">#F79009</color>
+    <color name="xald_hero_inicio">#1B1E2E</color>
+    <color name="xald_hero_fin">#2E3354</color>
+    <color name="xald_hero_texto_suave">#A9AECB</color>
+    <color name="xald_hero_detalle">#CDD1E6</color>
+    <color name="xald_blanco_translucido">#1FFFFFFF</color>
+    <color name="xald_pista">#EEF0F5</color>
 </resources>

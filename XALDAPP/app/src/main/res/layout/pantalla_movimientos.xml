@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <!-- BÚSQUEDA -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="16dp"
+        android:background="@drawable/fondo_campo"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="14dp"
+        android:paddingEnd="8dp">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_buscar"
+            app:tint="@color/xald_texto_terciario" />
+
+        <EditText
+            android:id="@+id/etBuscar"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:hint="@string/buscar_hint"
+            android:imeOptions="actionSearch"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:maxLines="1"
+            android:textColor="@color/xald_texto"
+            android:textColorHint="@color/xald_texto_terciario"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/btnLimpiarBusqueda"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/fondo_tab"
+            android:gravity="center"
+            android:text="✕"
+            android:textColor="@color/xald_texto_terciario"
+            android:textSize="14sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- FILTROS: tipo, origen y orden -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:clipToPadding="false"
+        android:paddingStart="16dp"
+        android:paddingEnd="8dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/chipTodos"
+                style="@style/Xald.Chip"
+                android:text="Todos" />
+
+            <TextView
+                android:id="@+id/chipGastos"
+                style="@style/Xald.Chip"
+                android:text="Gastos" />
+
+            <TextView
+                android:id="@+id/chipIngresos"
+                style="@style/Xald.Chip"
+                android:text="Ingresos" />
+
+            <TextView
+                android:id="@+id/chipTransferencias"
+                style="@style/Xald.Chip"
+                android:text="Transferencias" />
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center_vertical"
+                android:layout_marginEnd="8dp"
+                android:background="@color/xald_borde" />
+
+            <TextView
+                android:id="@+id/chipOrigen"
+                style="@style/Xald.Chip"
+                android:text="Origen: todos" />
+
+            <TextView
+                android:id="@+id/chipOrden"
+                style="@style/Xald.Chip"
+                android:text="Más recientes" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <TextView
+        android:id="@+id/tvResumenFiltro"
+        style="@style/Xald.Leyenda"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="4dp" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <ScrollView
+            android:id="@+id/scrollMovimientos"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingBottom="96dp">
+
+            <LinearLayout
+                android:id="@+id/listaMovimientos"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp" />
+        </ScrollView>
+
+        <LinearLayout
+            android:id="@+id/vacioMovimientos"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="48dp"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔎"
+                android:textSize="40sp" />
+
+            <TextView
+                android:id="@+id/tvVacioMovimientos"
+                style="@style/Xald.Leyenda"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:paddingStart="32dp"
+                android:paddingEnd="32dp"
+                android:text="@string/vacio_movimientos"
+                android:textSize="14sp" />
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>
