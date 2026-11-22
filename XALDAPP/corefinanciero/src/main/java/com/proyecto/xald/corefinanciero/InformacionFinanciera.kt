@@ -117,9 +117,16 @@ fun crearInformacionFinanciera(
     }
 }
 
-/** Abre la base en archivo con sus migraciones. Separada para poder probar la migración. */
-internal fun abrirBaseCore(context: Context, nombreArchivo: String): CoreDatabase =
-    Room.databaseBuilder(context.applicationContext, CoreDatabase::class.java, nombreArchivo)
+/**
+ * Abre la base en archivo con sus migraciones. Separada para poder probar la migración.
+ *
+ * En la app siempre va cifrada con SQLCipher ([CifradoBaseLocal]). [cifrada] = false existe solo
+ * para las pruebas con Robolectric, donde no hay librería nativa ni Android Keystore.
+ */
+internal fun abrirBaseCore(context: Context, nombreArchivo: String, cifrada: Boolean = true): CoreDatabase {
+    val builder = Room.databaseBuilder(context.applicationContext, CoreDatabase::class.java, nombreArchivo)
         .addMigrations(MIGRACION_CORE_1_2)
         .allowMainThreadQueries()
-        .build()
+    if (cifrada) builder.openHelperFactory(CifradoBaseLocal.factoria(context, nombreArchivo))
+    return builder.build()
+}

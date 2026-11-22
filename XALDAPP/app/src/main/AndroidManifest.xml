@@ -13,7 +13,10 @@
         android:name="android.hardware.telephony"
         android:required="false" />
 
-    <!-- allowBackup en false: la base local contiene datos financieros personales y aún no está cifrada (ESC-04). -->
+    <!-- allowBackup en false: la base local contiene datos financieros personales. Va cifrada con
+         SQLCipher (ADR-0018) y su llave vive en el Keystore, que no viaja en un respaldo.
+         usesCleartextTraffic sale del build type: true solo en debug (backend local por http en
+         el emulador); en release es false y todo el tráfico debe ir por https. -->
     <application
         android:name=".XaldApplication"
         android:allowBackup="false"
@@ -22,7 +25,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.XALD"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="${permitirTextoPlano}">
 
         <activity
             android:name=".MainActivity"

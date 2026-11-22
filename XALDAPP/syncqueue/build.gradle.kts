@@ -63,5 +63,8 @@ dependencies {
 
     // Gson (Conversión a JSON)
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // La fábrica cifrada viene de :corefinanciero (CifradoBaseLocal); aquí basta la interfaz.
+    implementation("androidx.sqlite:sqlite:2.2.0")
 }
 

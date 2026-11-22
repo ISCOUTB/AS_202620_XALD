@@ -40,7 +40,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Permite http solo en debug (backend local en http://10.0.2.2:8000).
+            manifestPlaceholders["permitirTextoPlano"] = "true"
+        }
         release {
+            // En release solo https (el backend de Render ya lo es).
+            manifestPlaceholders["permitirTextoPlano"] = "false"
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

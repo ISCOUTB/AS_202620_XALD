@@ -2,6 +2,7 @@ package com.proyecto.xald.syncqueue
 
 import android.content.Context
 import androidx.room.Room
+import com.proyecto.xald.corefinanciero.CifradoBaseLocal
 import com.proyecto.xald.corefinanciero.PayloadSincronizacionDTO
 import java.util.UUID
 
@@ -24,6 +25,8 @@ data class ResumenProcesamiento(
     val sinConexion: Boolean = false
 )
 
+private const val NOMBRE_BASE_COLA = "xald_syncqueue.db"
+
 /**
  * Fábrica pública del servicio.
  */
@@ -39,11 +42,13 @@ fun crearColaSincronizacionService(
 ): ColaSincronizacionService {
 
     // Si es un test, usa memoria RAM. Si es la app real, usa el archivo .db (con migración 1 -> 2)
+    // cifrado con SQLCipher; si venía en texto plano de una versión anterior, se migra al abrir.
     val builder = if (usarBaseDatosEnMemoria) {
         Room.inMemoryDatabaseBuilder(context.applicationContext, SyncDatabase::class.java)
     } else {
-        Room.databaseBuilder(context.applicationContext, SyncDatabase::class.java, "xald_syncqueue.db")
+        Room.databaseBuilder(context.applicationContext, SyncDatabase::class.java, NOMBRE_BASE_COLA)
             .addMigrations(MIGRACION_1_2)
+            .openHelperFactory(CifradoBaseLocal.factoria(context, NOMBRE_BASE_COLA))
     }
 
     val db = builder.allowMainThreadQueries().build()

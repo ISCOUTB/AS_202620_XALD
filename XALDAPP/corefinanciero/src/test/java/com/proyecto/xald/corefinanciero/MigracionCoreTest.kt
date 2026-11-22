@@ -49,7 +49,7 @@ class MigracionCoreTest {
         v1.version = 1
         v1.close()
 
-        val db = abrirBaseCore(context, nombre)
+        val db = abrirBaseCore(context, nombre, cifrada = false)
         try {
             // La primera consulta abre la base: corre la migración y Room valida el esquema.
             val viejo = db.transaccionDao().obtenerPorId("tx-viejo")

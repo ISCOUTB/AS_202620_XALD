@@ -51,4 +51,10 @@ dependencies {
     implementation("androidx.room:room-ktx:$roomVersion")
     kapt("androidx.room:room-compiler:$roomVersion")
     kapt("org.xerial:sqlite-jdbc:3.46.1.3")
+
+    // Cifrado en reposo de la base local (SQLCipher, AES-256). Ver ADR-0018.
+    // 4.9.0 es la última que depende de androidx.sqlite 2.2.x (compatible con Room 2.6.1)
+    // y ya viene alineada a páginas de 16 KB.
+    implementation("net.zetetic:sqlcipher-android:4.9.0@aar")
+    implementation("androidx.sqlite:sqlite:2.2.0")
 }
