@@ -8,81 +8,75 @@ Esta sección muestra, para cada uno de los 5 escenarios de calidad definidos en
 
 **Pasos del escenario:**
 
-1. **Recepción del evento:** el sistema operativo Android recibe un SMS del banco y activa el BroadcastReceiver del módulo `:parser`.
-2. **Filtrado:** `:parser` valida el remitente y extrae el texto plano.
-3. **Parsing local (Regex):** `:parser` evalúa el texto con expresiones regulares. **Caso A (Regex exitoso):** si reconoce el comercio y el monto, genera directamente el objeto `Transaction`. **Caso B (comercio ambiguo):** envía el texto al módulo `:aigemini`, que a su vez consulta la Gemini API externa; si falla o no responde, este caso se resuelve según el flujo detallado en el **Escenario 2 (ESC-02)**.
-4. **Persistencia local:** el objeto `Transaction` se envía a `:corefinanciero`, que cifra los campos con AES-256 y guarda la fila en la base de datos local (Room).
-5. **Encolado para sincronización:** `:corefinanciero` notifica a `:syncqueue`, que agrega el registro a la cola de sincronización con su UUID y timestamp.
-6. **Notificación a la UI:** `:corefinanciero` notifica el cambio a `:app`, que actualiza el saldo y el reporte en pantalla. *(el mecanismo exacto de notificación — StateFlow, LiveData u otro — está pendiente de confirmar contra la implementación real de `:app`)*.
+1. **Recepción del evento:** el sistema operativo Android recibe un SMS del banco y activa el `SmsReceiver` del módulo `:app`, que primero comprueba el consentimiento del usuario.
+2. **Validación y parsing:** `ProcesarNotificacionUseCase` llama a `:parser` (`parsearSms`), que valida el remitente contra la regla bancaria y extrae monto y comercio con expresiones regulares. Si el remitente no está autorizado o el formato no se reconoce, no se crea nada.
+3. **Categorización inmediata:** si es un gasto, el orquestador usa las reglas locales (`CategorizadorLocal`, 0 ms de red). Si no reconoce el comercio, queda «Sin Categorizar».
+4. **Persistencia local:** `:corefinanciero` guarda la transacción en Room (base cifrada con SQLCipher) con un identificador determinista calculado del propio SMS; si el mismo SMS llega dos veces, el segundo se rechaza.
+5. **Encolado:** el orquestador agrega el payload a la cola de `:syncqueue` (también en Room cifrada).
+6. **Trabajo diferido y UI:** `SmsReceiver` pide el envío inmediato a WorkManager, programa `CategorizacionIaWorker` (Gemini) para los «Sin Categorizar», revisa las alertas de presupuesto y llama a `NotificadorCambios.avisar()` para refrescar la UI.
 
 ```mermaid
 sequenceDiagram
     participant SO as Sistema Operativo (Android)
-    participant PARSER as :parser
-    participant AIGEMINI as :aigemini
-    participant GEMINI as Google Gemini API (externo)
+    participant RCV as SmsReceiver (:app)
+    participant UC as ProcesarNotificacionUseCase (:app)
+    participant P as :parser
+    participant AI as :aigemini (reglas locales)
     participant CORE as :corefinanciero
-    participant SYNC as :syncqueue
-    participant APP as :app
+    participant SQ as :syncqueue
+    participant WM as WorkManager
 
-    SO->>PARSER: Broadcast SMS entrante
-    PARSER->>PARSER: Valida remitente, extrae texto plano
-    PARSER->>PARSER: Evalúa con Regex
-    alt Caso A: Regex reconoce comercio y monto
-        PARSER->>CORE: Transaction (comercio, monto, fecha)
-    else Caso B: comercio ambiguo
-        PARSER->>AIGEMINI: Texto del comercio
-        AIGEMINI->>GEMINI: Solicitud HTTPS/JSON
-        GEMINI-->>AIGEMINI: Categoría sugerida (ver ESC-02 si falla)
-        AIGEMINI-->>PARSER: Categoría sugerida
-        PARSER->>CORE: Transaction (con categoría)
-    end
-    CORE->>CORE: Cifra AES-256, guarda en Room
-    CORE->>SYNC: Agrega a la cola (UUID + timestamp)
-    CORE-->>APP: Notifica cambio de estado
-    APP->>APP: Actualiza saldo y reportes en pantalla
+    SO->>RCV: Broadcast SMS entrante
+    RCV->>RCV: Comprueba consentimiento
+    RCV->>UC: ejecutar(remitente, texto, timestamp)
+    UC->>P: parsearSms (valida remitente + Regex)
+    P-->>UC: monto, comercio
+    UC->>AI: categorizarComercio (reglas locales)
+    AI-->>UC: categoría o «Sin Categorizar»
+    UC->>CORE: guardarTransaccionCompleta (Room + SQLCipher)
+    UC->>SQ: encolarTransaccion
+    RCV->>WM: envío inmediato + CategorizacionIaWorker
+    RCV->>RCV: NotificadorCambios.avisar() refresca la UI
 ```
 
-**Aspectos notables:** la IA nunca bloquea el flujo — solo interviene en el Caso B, y aun así el resultado se integra al mismo camino de persistencia que el Caso A. Esto es lo que le da a XALD su característica de captura rápida y no bloqueante.
+**Aspectos notables:** la IA nunca bloquea el flujo — en la ingesta solo se usan reglas locales; Gemini corre después, en segundo plano. Esto es lo que le da a XALD su característica de captura rápida y no bloqueante.
 
 ---
 
 ## 6.2 Runtime Scenario 2 — Indisponibilidad del Servicio de Categorización (verifica ESC-02)
 
-**Motivación:** este escenario detalla qué pasa exactamente cuando la Gemini API falla, algo que en el Escenario 1 solo se mencionaba de forma general. Los tiempos de espera y el número de reintentos vienen de la medida ya definida en la Sección 10 (umbral de 5 s, máximo 3 reintentos con espera creciente, 0 transacciones perdidas); la reclasificación posterior todavía no está implementada como componente y se describe por separado, sin diagramarla como un flujo ya existente.
+**Motivación:** este escenario detalla qué pasa exactamente cuando la Gemini API falla, algo que en el Escenario 1 solo se mencionaba de forma general. Los tiempos de espera y el número de reintentos vienen de la medida ya definida en la Sección 10 (umbral de 5 s, máximo 3 reintentos con espera creciente, 0 transacciones perdidas); la reclasificación posterior la hace `CategorizacionIaWorker`.
 
 **Pasos del escenario:**
 
-1. `:aigemini` envía la solicitud de categoría a la Gemini API.
-2. Si no hay respuesta en **5 segundos**, se reintenta con espera creciente (propuesta: ~2 s, luego ~4 s).
-3. Si los 3 intentos fallan, `:aigemini` devuelve a `:parser` que no fue posible categorizar, y la transacción se guarda igual en `:corefinanciero` con la categoría **"Sin Categorizar"** — nunca se bloquea ni se pierde el registro.
+1. `CategorizacionIaWorker` (WorkManager, con red conectada) toma las transacciones en «Sin Categorizar» y pide la categoría a Gemini (`CategorizadorGemini`, SDK).
+2. `CategorizadorGemini` usa un timeout de 60 s por modelo y prueba 2 modelos en orden; si ninguno responde, el worker pide a WorkManager reintentar con espera exponencial (30 s inicial).
+3. Si Gemini no responde, la transacción ya está guardada como «Sin Categorizar»: nunca se bloquea ni se pierde.
 
 ```mermaid
 sequenceDiagram
-    participant PARSER as :parser
-    participant AIGEMINI as :aigemini
-    participant GEMINI as Google Gemini API (externo)
+    participant WM as WorkManager
+    participant W as CategorizacionIaWorker (:app)
+    participant AI as :aigemini
+    participant G as Google Gemini API (externo)
     participant CORE as :corefinanciero
 
-    PARSER->>AIGEMINI: Texto del comercio
-    AIGEMINI->>GEMINI: Solicitud de categoría
-    alt Sin respuesta en 5 s (timeout)
-        AIGEMINI->>GEMINI: Reintento 1 (espera ~2 s)
-        alt Sigue sin responder
-            AIGEMINI->>GEMINI: Reintento 2 (espera ~4 s)
-            alt 3er intento también falla
-                AIGEMINI-->>PARSER: No fue posible categorizar
-                PARSER->>CORE: Transaction con categoría "Sin Categorizar"
-            end
-        end
-    else Responde a tiempo
-        GEMINI-->>AIGEMINI: Categoría sugerida (JSON)
-        AIGEMINI-->>PARSER: Categoría sugerida
-        PARSER->>CORE: Transaction con categoría real
+    WM->>W: doWork (red conectada)
+    W->>CORE: obtenerHistorial (filtra «Sin Categorizar»)
+    W->>AI: categorizarComercio
+    AI->>G: Solicitud (solo el comercio)
+    alt Responde con categoría válida
+        G-->>AI: Categoría
+        AI-->>W: Exitosa
+        W->>CORE: actualizarCategoria
+        W->>W: Re-encola para actualizar el backend
+    else Falla o no responde
+        AI-->>W: Fallo
+        W->>WM: Result.retry (espera exponencial)
     end
 ```
 
-> **Nota — extensión pendiente de implementar:** la reclasificación automática de transacciones "Sin Categorizar" cuando el servicio vuelve a responder requiere un componente (por ejemplo, un `Worker` periódico dentro de `:syncqueue` o `:aigemini`) que **todavía no está instanciado en el código**. Este diagrama solo cubre el flujo de captura inicial; la reclasificación queda pendiente de diseño e implementación, y no se representa aquí como si ya existiera.
+> **Nota — reclasificación implementada.** `CategorizacionIaWorker` ya reclasifica las transacciones «Sin Categorizar» cuando hay conexión y re-encola la transacción corregida. Límite conocido: el backend toma un reenvío con la misma `fecha_transaccion` como duplicado ([ADR-0019](../adr/0019-persistencia-remota-postgres.md), punto abierto «propagar ediciones»), así que la categoría corregida queda en el teléfono.
 
 **Aspectos notables:** el diseño garantiza el umbral de "0 transacciones perdidas" porque el registro nunca depende de que la IA responda — la categorización es un enriquecimiento posterior, no un requisito para guardar el gasto.
 
@@ -90,44 +84,37 @@ sequenceDiagram
 
 ## 6.3 Runtime Scenario 3 — Resolución de Conflictos al Sincronizar (verifica ESC-05)
 
-**Motivación:** este escenario extiende el flujo general de sincronización al caso específico de la Sección 10: el mismo usuario edita la misma transacción en dos dispositivos distintos mientras ambos están sin conexión.
+**Motivación:** este escenario extiende el flujo general de sincronización al caso específico de la Sección 10: el backend recibe dos versiones de la misma transacción y decide con Last-Write-Wins.
 
 **Pasos del escenario:**
 
-1. El Dispositivo A y el Dispositivo B editan la misma transacción mientras ambos están offline, cada uno con su propio timestamp, gestionado por su propio módulo `:syncqueue` local.
-2. El Dispositivo A recupera la conexión primero y su `:syncqueue` sincroniza la transacción con el Backend XALD; como no hay nada más registrado todavía, se guarda sin conflicto.
-3. El Dispositivo B recupera la conexión después y su `:syncqueue` envía su propia versión de la misma transacción.
-4. El Backend XALD detecta que ya existe un registro previo y aplica **Last-Write-Wins (LWW)**: compara los timestamps y conserva la versión más reciente.
-5. El dispositivo cuya versión no ganó actualiza su copia local con la versión vencedora, para que ambos dispositivos queden consistentes.
-
-Aquí está, solo el bloque del diagrama, listo para copiar y pegar (reemplaza el bloque Mermaid actual dentro de la sección **6.3** en `docs/arc42/06-Runtime view.md`):
+1. La app guarda la transacción en Room y la encola en `:syncqueue`.
+2. WorkManager (periódico cada 15 min o envío inmediato, con red conectada) ejecuta `procesarPendientes`.
+3. `TransporteHttpSincronizacion` hace `POST /api/v1/transacciones` con `X-API-Key`.
+4. El backend compara `id_transaccion` y `fecha_transaccion` en PostgreSQL (`repositorio.registrar`): si es nueva la guarda; si es un reenvío idéntico no cambia nada; si es un conflicto, gana la `fecha_transaccion` más reciente.
+5. El backend responde `202` con `estado: "ACEPTADO"`; la cola retira el mensaje solo con un `2xx` y la app marca la transacción como sincronizada.
+6. No hay descarga de cambios al teléfono: si otro dispositivo ganó, este no actualiza su copia local. Eso queda como trabajo futuro.
 
 ```mermaid
 sequenceDiagram
-    participant D1 as Dispositivo A (:syncqueue)
-    participant D2 as Dispositivo B (:syncqueue)
-    participant BK as Backend XALD (Motor LWW)
+    participant A as Aplicación (:syncqueue + WorkManager)
+    participant B as Backend FastAPI
+    participant DB as PostgreSQL
 
-    Note over D1,D2: Ambos dispositivos offline,<br/>editan la misma transacción X
-    D1->>D1: Edita transacción X (timestamp T1)
-    D2->>D2: Edita transacción X (timestamp T2)
-
-    D1->>BK: POST /api/v1/sync<br/>{idTransaccion, monto, comercio, fechaTimestamp: T1}
-    BK->>BK: Guarda X con T1 (sin conflicto todavía)
-    BK-->>D1: 200 OK { status: "success", synced_at }
-
-    D2->>BK: POST /api/v1/sync<br/>{idTransaccion, monto, comercio, fechaTimestamp: T2}
-    BK->>BK: Detecta conflicto: X ya existe con T1
-    alt T2 es más reciente
-        BK->>BK: Aplica LWW: conserva la versión con T2
-    else T1 es más reciente
-        BK->>BK: Aplica LWW: conserva la versión con T1
+    A->>B: POST /api/v1/transacciones (X-API-Key)
+    B->>DB: Buscar id_transaccion (SELECT ... FOR UPDATE)
+    alt No existe
+        B->>DB: Guardar versión
+    else Misma fecha_transaccion (reenvío)
+        B->>B: Sin cambios
+    else Fecha distinta (conflicto)
+        B->>DB: Conservar la fecha más reciente (LWW)
     end
-    BK-->>D2: 200 OK { status: "success", synced_at }
-    D2->>D2: Actualiza su copia local con la versión vencedora
+    B-->>A: 202 ACEPTADO
+    A->>A: Retira de la cola y marca sincronizada
 ```
 
-**Aspectos notables:** este es el escenario de mayor riesgo técnico del árbol de utilidad (Riesgo: Alta), porque depende de que los relojes de ambos dispositivos sean razonablemente confiables para que LWW elija correctamente.
+**Aspectos notables:** este es el escenario de mayor riesgo técnico del árbol de utilidad (Riesgo: Alta), porque depende de que los relojes de ambos dispositivos sean razonablemente confiables para que LWW elija correctamente. No se verificó con dos dispositivos reales (ver ESC-05).
 
 ---
 
@@ -170,7 +157,7 @@ sequenceDiagram
 
 1. Un atacante con acceso físico extrae el archivo de base de datos del dispositivo (por ejemplo, con `adb pull`).
 2. Intenta leer el contenido directamente con herramientas como `strings` o `sqlite3`.
-3. El contenido resulta ilegible porque `:corefinanciero` lo cifra con AES-256.
+3. El contenido resulta ilegible porque `:corefinanciero` lo guarda en una base cifrada con SQLCipher (AES-256).
 4. El atacante intentaría obtener la llave de cifrado, pero esta vive en el Android Keystore, protegida por el hardware/cuenta del dispositivo y nunca se guarda junto a los datos.
 5. Sin la llave, el 0% de los campos financieros es legible en texto plano.
 
@@ -178,7 +165,7 @@ sequenceDiagram
 sequenceDiagram
     participant ATK as Atacante (acceso físico)
     participant FS as Sistema de archivos del dispositivo
-    participant CORE as :corefinanciero (Room, AES-256)
+    participant CORE as :corefinanciero (Room + SQLCipher)
     participant KS as Android Keystore
 
     ATK->>FS: Extrae el archivo de base de datos (ej. adb pull)
@@ -189,4 +176,4 @@ sequenceDiagram
     Note over ATK,CORE: Sin la llave, 0% de los campos<br/>financieros es legible en texto plano
 ```
 
-**Aspectos notables:** este escenario verifica directamente la restricción RL-01 (Habeas Data) y RT-03 — la seguridad no depende de ocultar el archivo, sino de que sea inútil sin la llave, que es la práctica correcta de cifrado en reposo.
+**Aspectos notables:** este escenario verifica directamente la restricción RL-01 (Habeas Data) y RT-03 — la seguridad no depende de ocultar el archivo, sino de que sea inútil sin la llave, que es la práctica correcta de cifrado en reposo. La lógica de la llave está probada en JVM (`CifradoBaseLocalTest`); la lectura con `adb pull` y `strings` sobre un equipo real aún no está registrada como evidencia.
