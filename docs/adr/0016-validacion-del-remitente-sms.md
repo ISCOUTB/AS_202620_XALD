@@ -1,6 +1,6 @@
 # ADR-0016: Validación del Remitente del SMS en el Registro de Reglas de `:parser`
 
-* *Estatus:* Decidido — implementación pendiente
+* *Estatus:* Decidido — implementado
 * *Fecha:* Noviembre 2026
 * *Proyecto:* XALDAPP — Aplicación de gestión financiera
 * *Corte:* Tercer corte — Semana 13, modelado de amenazas
@@ -12,9 +12,7 @@
 de compra se procesa como compra real (arc42 §11, «Vulnerabilidad ante *phishing*»). Cualquiera puede
 mandar un SMS con `Compra por $500000 en ...` y alterar el saldo y los reportes del usuario.
 
-Hoy `ServicioParser.parsear(mensajeCrudo: String)` solo recibe el texto. El remitente
-(`SmsMessage.originatingAddress`) se pierde antes de llegar al parser. El `BroadcastReceiver` todavía no
-existe: el manifiesto no pide `RECEIVE_SMS`. La decisión se toma ahora para que ese receptor nazca con la
+Hoy `ServicioParser.parsearSms(remitente, texto, timestamp)` valida el remitente contra la lista de cada regla bancaria (`ParseoSms.kt:41-46`) y el `SmsReceiver` (módulo `:app`) lo invoca; el manifiesto declara `RECEIVE_SMS`. La decisión se toma ahora para que ese receptor nazca con la
 validación y no se agregue después.
 
 ## Opciones Evaluadas
