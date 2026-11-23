@@ -47,11 +47,11 @@ Costo de reversión, si algún día se cambia a versiones asignadas por el servi
 * **Riesgo:** LWW depende de que el reloj del dispositivo sea confiable. Un reloj adelantado hace que su versión gane siempre. Este es el riesgo de mayor probabilidad de ESC-05 (Sección 11).
 * **Mitigación:** ninguna formalizada. Queda declarado como deuda: una opción futura es que el backend registre su propia hora de recepción y rechace fechas muy por delante de ella.
 * **Riesgo (resuelto en noviembre 2026):** el estado de versiones (`ultima_version` en `main.py`) vivía en memoria y se perdía en cada despliegue o cuando Render dormía el servicio (ADR-0008).
-* **Mitigación:** la versión vigente de cada transacción ahora se guarda en PostgreSQL y la comparación se hace con `SELECT ... FOR UPDATE` ([ADR-0015](0015-persistencia-remota-postgres.md)).
+* **Mitigación:** la versión vigente de cada transacción ahora se guarda en PostgreSQL y la comparación se hace con `SELECT ... FOR UPDATE` ([ADR-0019](0019-persistencia-remota-postgres.md)).
 
 ## Puntos Abiertos
 
-* ~~Persistencia remota del estado de versiones (clave única por `id_transaccion`).~~ Resuelto en [ADR-0015](0015-persistencia-remota-postgres.md).
+* ~~Persistencia remota del estado de versiones (clave única por `id_transaccion`).~~ Resuelto en [ADR-0019](0019-persistencia-remota-postgres.md).
 * Política ante relojes desfasados.
 
 **Trazabilidad:**
