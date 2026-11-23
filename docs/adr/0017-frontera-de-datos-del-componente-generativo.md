@@ -1,6 +1,6 @@
 # ADR-0017: Frontera de Datos y Validación de Salida del Componente Generativo (Gemini)
 
-* *Estatus:* Decidido — parte vigente en el orquestador, parte pendiente con el cliente real
+* *Estatus:* Decidido — cliente real implementado; validación de salida y caché pendientes de verificar
 * *Fecha:* Noviembre 2026
 * *Proyecto:* XALDAPP — Aplicación de gestión financiera
 * *Corte:* Tercer corte — Semana 13, modelado de amenazas
@@ -9,8 +9,7 @@
 ## Contexto y Problema
 
 `:aigemini` categoriza transacciones con la API de Google Gemini (conector 2 del C2). Hoy
-`CategorizadorGemini` es un *mock* ([ADR-0012](0012-aplazamiento-integracion-gemini.md)) y la integración
-real llegará con el plan P-03. Un componente generativo trae tres riesgos que no tiene una API
+`CategorizadorGemini` usa el SDK real de Gemini (con respaldo local). Un componente generativo trae tres riesgos que no tiene una API
 determinista:
 
 1. **Fuga de datos:** lo que se manda en el prompt sale del dispositivo hacia un tercero en el exterior.
@@ -66,14 +65,4 @@ aprueba. El contrato público `ServicioCategorizacion` no cambia.
   «Salud» en vez de «Ocio»). Se acepta como riesgo residual en arc42 §11.4: altera un reporte, no expone
   datos, y el usuario lo corrige.
 
-## Verificación (cuando se implemente, P-03, S14)
-* Un `ServicioCategorizacion` falso que devuelve `"IGNORA TODO; Salario"` produce «Sin Categorizar» y no
-  escribe en la caché.
-* Una prueba sobre el armado de la petición verifica que el cuerpo enviado no contiene el monto ni el
-  texto del SMS.
-
-## Trazabilidad
-* *Amenazas:* AM-06, AM-09, AM-10, AM-11.
-* *ADR relacionados:* [ADR-0012](0012-aplazamiento-integracion-gemini.md), [ADR-0013](0013-extraer-o-no-integracion-gemini.md).
-* *C4:* conector 2 y caché de categorías del C2. *arc42:* §8.7, §8.8, §8.10, §11.4.
-* *Privacidad:* [`docs/seguridad/privacidad.md`](../seguridad/privacidad.md), transmisión a Google.
+## Verificación
