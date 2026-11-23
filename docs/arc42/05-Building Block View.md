@@ -1,5 +1,5 @@
 # Building Block View
-La vista de bloques de construcción muestra la descomposición de XALD en dos niveles, alineados directamente con los niveles **C1** y **C2** del modelo C4 documentado en `docs/c4/c4.md`, y con el esqueleto de arranque ya implementado (`Bootstrapper` + módulos `AppModule`).
+La vista de bloques de construcción muestra la descomposición de XALD en dos niveles, alineados directamente con los niveles **C1** y **C2** del modelo C4 documentado en `docs/c4/c4.md`.
 
 | Bloque | Responsabilidad |
 | :--- | :--- |
@@ -10,12 +10,12 @@ La vista de bloques de construcción muestra la descomposición de XALD en dos n
 
 ### 5.1 Nivel 1 — Sistema XALD (corresponde al C1 de `docs/c4/c4.md`)
 
-Vista de caja blanca del sistema completo: dentro de la frontera "Sistema XALD" conviven dos contenedores principales: la **Aplicación Móvil XALD** y el **Backend XALD**, conectados a través del **conector 4 (Sincronización REST / TLS 1.3)**. Ambos completan el ciclo de vida de una transacción, siendo la Aplicación Móvil el único contenedor con el que el usuario interactúa directamente (conector 3), el que recepta notificaciones bancarias (conector 1) y el que consulta la API externa de IA (conector 2).
+Vista de caja blanca del sistema completo: dentro de la frontera "Sistema XALD" conviven dos contenedores principales: la **Aplicación Móvil XALD** y el **Backend XALD**, conectados a través del **conector 4 (Sincronización REST / HTTPS). Ambos completan el ciclo de vida de una transacción, siendo la Aplicación Móvil el único contenedor con el que el usuario interactúa directamente (conector 3), el que recepta notificaciones bancarias (conector 1) y el que consulta la API externa de IA (conector 2).
 
 | 1. Aplicación Móvil XALD (Contenedor Android) | 2. Backend XALD (Contenedor Servidor) |
 | :--- | :--- |
 | • Ingesta e interpretación de SMS (`:parser` - `ParseoSms`) | • Servidor API REST / Endpoints HTTP |
-| • Categorización inteligente via IA (`:aigemini` - `CategorizadorGemini`) | • Procesamiento y consolidación de reportes |
+| • Categorización inteligente via IA (`:aigemini` - `CategorizadorGemini`) | •Recepción y consulta de transacciones 
 | • Base de datos local cifrada AES-256 (`:corefinanciero` - `TransaccionEntidad`) | • Motor de resolución de conflictos de sincronización (LWW) |
 | • Gestor de cola offline en tránsito (`:syncqueue` - `ColaSincronizacion`) | • Persistencia remota (Base de Datos PostgreSQL / Respaldo) |
 | • Interfaz de usuario y orquestación (`:app` - Jetpack Compose) | |
