@@ -24,8 +24,7 @@ Acá se muestra por dónde entra y sale la información, y cómo viaja de un lad
 | Aplicación XALD ↔ Google Gemini API (conector 2) | Externo | HTTPS / REST (POST) | JSON (responseMimeType: application/json) | TLS 1.3 + API Key |
 | Usuario Final ↔ Aplicación XALD (conector 3) | Externo | UI nativa / Reportes en pantalla | Vistas y datos locales | N/A (interacción local en el dispositivo) |
 | Aplicación XALD ↔ Backend XALD (conector 4) | Entre Contenedores | HTTPS / REST (`POST /api/v1/transacciones`) | JSON, una transacción por mensaje de la cola | HTTPS + cabecera `X-API-Key` (llaves rotables, [ADR-0015](../adr/0015-autenticacion-del-cliente-movil.md)) |
-| Aplicación XALD → DB Local | Interno | Llamada interna SQLite / Room | Objetos Relacionales / Filas | AES-256 vía Android Keystore |
-
+| Aplicación XALD → DB Local | Interno | Llamada interna SQLite / Room | Objetos Relacionales /SQLCipher AES-256; llave en el Android Keystore
 El diagrama de contexto formal se encuentra en `docs/c4/c4.md`. Las interfaces marcadas como **Externo** corresponden a los conectores 1, 2 y 3, que cruzan la frontera del sistema en el C1. La marcada como **Entre Contenedores** corresponde al conector 4: cruza red, pero permanece dentro de la frontera de XALD —es el caso del Backend XALD, representado dentro del recuadro del sistema— y se documenta a fondo en el nivel de Contenedores (C2). La marcada como **Interno** es una llamada en el mismo proceso, sin cruzar red, y por eso no tiene número de conector en el C1.
 
 **INPUT/OUTPUT MAP**
@@ -46,7 +45,7 @@ El diagrama de contexto formal se encuentra en `docs/c4/c4.md`. Las interfaces m
         v
 [Base de datos local]
 
-[Aplicación XALD] <==4 · Sincronización REST==> [Backend XALD]
+[Aplicación XALD] --4 · POST transacciones (envío y acuse)--> [Backend XALD]
         (ambos dentro de la frontera del sistema XALD, ver C1)
 
 [Usuario final] <--3 · UI / Reportes--> [Aplicación XALD]
