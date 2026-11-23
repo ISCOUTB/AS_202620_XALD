@@ -27,7 +27,7 @@ Cada escenario sigue las seis partes que exige arc42: fuente, estímulo, artefac
 | **Artefacto** | Processing & Parser Module (Gemini API Client) |
 | **Entorno** | Con conexión disponible, servicio externo degradado o caído |
 | **Respuesta** | La transacción ya registrada se conserva, se marca como "Sin Categorizar" y se reclasifica automáticamente cuando el servicio vuelve a responder |
-| **Medida** | **Umbral:** 0 transacciones perdidas; corte a los 5 s; máximo 3 reintentos con espera creciente · **Carga:** 50 transacciones con el servicio simulado como no disponible · **Herramienta:** servidor simulado (*mock*) que devuelve error 503, verificación por conteo en base de datos |
+| **Medida** | **Umbral:** 0 transacciones perdidas; corte a los 5 s; máximo 3 reintentos con espera creciente · **Carga:** 50 transacciones con el servicio simulado como no disponible · **Herramienta:** servidor simulado (*mock*) que devuelve error 503, verificación por conteo en base de datos · **Implementación actual:** timeout de 60 s por modelo de Gemini y reintento de WorkManager con espera exponencial; el umbral de 5 s y 3 reintentos no está medido. |
 
 **Objetivo de calidad:** 2 (Resiliencia) · **Objetivo de negocio:** OB-01 · **Restricción:** RO-02
 
@@ -82,7 +82,7 @@ La medición se hizo contra el **Backend XALD desplegado**, no en local.
 | **Quién mide** | `backend/scripts/medir_esc05.py`, ejecutado desde [completar: equipo, sistema operativo, versión de Python y red desde donde se corrió]. |
 | **Fecha** | [completar: la línea `Fecha (UTC)` que imprime el script en la corrida que se reporta]. |
 | **Preparación** | El script llama a `GET /health` antes de empezar para despertar el servicio (Render Free duerme tras 15 min sin tráfico). Lee el contador `xald_sync_conflictos_resueltos_total` de `/metrics` antes y después, y el resultado es la diferencia. |
-| **Estado del servidor** | `ultima_version` vive en memoria y empieza vacío en cada arranque. Si Render reinicia el servicio en medio de la corrida, el contador vuelve a cero y la diferencia sale mal; en ese caso se repite la corrida. |
+| **Estado del servidor** | `ultima_version` vive en memoria y empieza vacío en cada arranque. Si Render reinicia el servicio en medio de la corrida, el contador vuelve a cero y la diferencia sale mal; en ese caso se repite la corrida. Esta medición se hizo antes de persistir el estado en PostgreSQL; hoy `ultima_version` ya no existe (ver [ADR-0019](../adr/0019-persistencia-remota-postgres.md)). |
 | **Repeticiones** | [completar: cuántas corridas se hicieron y cuál se reporta]. |
 | **Prueba local complementaria** | `test_medicion_esc05_30_transacciones_en_conflicto` en `backend/tests/test_lww.py` usa `TestClient`, es decir, corre en local (también en el CI) y no sale por red. No reemplaza la medición desplegada. |
 
