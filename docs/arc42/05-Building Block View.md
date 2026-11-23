@@ -27,7 +27,7 @@ Vista de caja blanca del sistema completo: dentro de la frontera "Sistema XALD" 
 
 ## 5.2 Nivel 2 — Aplicación Móvil Android (corresponde al C2 de `docs/c4/c4.md`)
 
-Descomposición del contenedor "Aplicación Móvil Android" en sus módulos internos, tal como aparecen en el C2: el módulo `:app` actúa como orquestador central y delega en cuatro submódulos independientes. La tabla incluye además su correspondencia con el esqueleto de código ya escrito.
+Descomposición del contenedor "Aplicación Móvil Android" en sus módulos internos, tal como aparecen en el C2: el módulo `:app` actúa como orquestador central y delega en cuatro submódulos independientes. La tabla incluye además su correspondencia con el esqueleto de código ya escrito. El detalle de componentes de la aplicación está en [`docs/c4/c3.md`](../c4/c3.md).
 
 | Módulo (C2) | Función | Carpeta en el esqueleto | Módulo de Inicialización |
 |---|---|---|---|
