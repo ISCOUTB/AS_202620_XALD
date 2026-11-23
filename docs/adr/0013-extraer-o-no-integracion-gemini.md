@@ -1,24 +1,25 @@
 # ADR-0013: Extraer o no extraer la integración con Gemini como servicio independiente
 
 * *Estatus:* Decidido
+* *Actualización (nov 2026):* la integración real con el SDK de Gemini ya existe (`CategorizadorGemini.kt`) con respaldo local (`CategorizadorConRespaldo.kt`). Este ADR registra por qué se aplazó en el Corte 3.
 * *Fecha:* Octubre 2026
 * *Corte:* Tercer corte — Semana 11
 
 ## Contexto y Problema
 
-Hoy la integración con Gemini vive dentro del monolito modular ([ADR-0006](0006-seleccion-de-estilo-arquitectonico.md)) como el módulo `:aigemini`, que expone el contrato `ServicioCategorizacion` ([ADR-0007](0007-contratos-por-modulo.md)) y está implementado por un *mock* ([ADR-0012](0012-aplazamiento-integracion-gemini.md)). Cuando se implemente la integración real hay que decidir dónde se ejecuta la llamada a la API de Gemini:
+Hoy la integración con Gemini vive dentro del monolito modular (ADR-0006) como el módulo `:aigemini`, que expone el contrato `ServicioCategorizacion` (ADR-0007) y está implementado por un mock (ADR-0012). Cuando se implemente la integración real hay que decidir dónde se ejecuta la llamada a la API de Gemini:
 
 * directamente desde la app Android, dentro del módulo `:aigemini` (no extraer), o
 * desde un servicio independiente, por ejemplo un endpoint de categorización en el Backend XALD que haga de intermediario (extraer).
 
-La decisión afecta directamente a los modos de fallo MF-04, MF-05 y MF-06 de la [Sección 11](../arc42/11-Risks%20and%20Technical%20Debts.md): extraer añade un segundo salto de red, con sus propios casos de "no responde", "responde tarde" y "responde dos veces".
+La decisión afecta directamente a los modos de fallo MF-04, MF-05 y MF-06 de la Sección 11: extraer añade un segundo salto de red, con sus propios casos de "no responde", "responde tarde" y "responde dos veces".
 
 ## Criterios de Decisión
 
 | # | Criterio | Fuente |
 |---|---|---|
 | C1 | Resiliencia y Offline-First: registrar la transacción aunque la IA falle o no haya red | ESC-01, ESC-02 |
-| C2 | Protección de la llave de Gemini: no debe quedar escrita en el código de la app | ADR-0004, ADR-0012, `EVIDENCIA-S9.md` |
+| C2 | Protección de la llave de Gemini: no debe quedar escrita en el código de la app | ADR-0004, ADR-0012, EVIDENCIA-S9.md |
 | C3 | Disponibilidad del componente intermedio: el backend hoy guarda su estado en memoria y Render (plan Free) duerme el servicio | ADR-0011 |
 | C4 | Costo y operación: capa gratuita de Google AI Studio, un servicio más que operar | arc42 §7 |
 | C5 | Latencia: corte de 5 s con máximo 3 reintentos | ESC-02 |
@@ -45,7 +46,7 @@ La app llama a un endpoint de categorización del backend y este llama a Gemini.
 
 Deja sin criterio explícito el punto donde se conectará la integración real, que es justo lo que el ADR-0012 quiso evitar.
 
-### Comparación de A y B contra los criterios
+## Comparación de A y B contra los criterios
 
 | Criterio | A: No extraer | B: Extraer |
 |---|---|---|
@@ -61,7 +62,7 @@ Deja sin criterio explícito el punto donde se conectará la integración real, 
 
 ## Decisión Tomada
 
-**No extraer** la integración con Gemini en este corte. `:aigemini` sigue siendo un módulo del monolito modular detrás del contrato `ServicioCategorizacion`. La integración real sigue aplazada según el ADR-0012 hasta que exista un mecanismo definido para proteger la llave (plan P-03 de la [Sección 11](../arc42/11-Risks%20and%20Technical%20Debts.md)).
+No extraer la integración con Gemini en este corte. `:aigemini` sigue siendo un módulo del monolito modular detrás del contrato `ServicioCategorizacion`. La integración real sigue aplazada según el ADR-0012 hasta que exista un mecanismo definido para proteger la llave (plan P-03 de la Sección 11).
 
 No es una decisión por falta de tiempo: con el backend actual (estado en memoria y arranques en frío), extraer empeoraría la resiliencia y la latencia que exige ESC-02.
 
@@ -75,9 +76,9 @@ No es una decisión por falta de tiempo: con el backend actual (estado en memori
 ## Consecuencias
 
 * **Positivas:** se mantiene el funcionamiento sin conexión y el determinismo de las pruebas; no se agrega un punto de fallo ni un servicio nuevo.
-* **Riesgo:** mientras no se resuelva la gestión de la llave, la categorización real sigue sin implementarse (ver [Sección 11](../arc42/11-Risks%20and%20Technical%20Debts.md)).
-* **Mitigación:** el contrato `ServicioCategorizacion` permite mover la implementación al backend, si se cumple algún disparador, sin cambios en otros módulos. Si se extrae, hay que revisar el argumento de "saga no aplica" de la [Sección 8.5](../arc42/08-Cross-cutting%20Concepts.md).
+* **Riesgo:** mientras no se resuelva la gestión de la llave, la categorización real sigue sin implementarse (ver Sección 11).
+* **Mitigación:** el contrato `ServicioCategorizacion` permite mover la implementación al backend, si se cumple algún disparador, sin cambios en otros módulos. Si se extrae, hay que revisar el argumento de "saga no aplica" de la Sección 8.5.
 
 ## Trazabilidad
 
-[ADR-0006](0006-seleccion-de-estilo-arquitectonico.md) · [ADR-0007](0007-contratos-por-modulo.md) · [ADR-0011](0011-resolucion-conflictos-lww.md) · [ADR-0012](0012-aplazamiento-integracion-gemini.md) · ESC-02 · RL-01 · MF-04 a MF-06 · `aspectos.md` (A-01, A-05)
+ADR-0006 · ADR-0007 · ADR-0011 · ADR-0012 · ESC-02 · RL-01 · MF-04 a MF-06 · aspectos.md (A-01, A-05)
