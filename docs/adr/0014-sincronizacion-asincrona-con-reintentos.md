@@ -73,9 +73,7 @@ continuar (por ejemplo, validar una licencia o iniciar sesión), debe ser síncr
 * Más código y más pruebas en `:syncqueue`.
 
 ### Riesgos
-* La cola vive en memoria: si Android mata el proceso, se pierden los pendientes. Ver
-  [límites](../mensajes/limites-del-experimento.md).
-* Nada invoca `procesarPendientes()` periódicamente todavía (falta el `Worker` de WorkManager).
+* Resuelto: la cola persiste en Room cifrada y `ProgramadorSincronizacion` / `SincronizacionWorker` la procesan con WorkManager (periódico cada 15 min e inmediato).
 
 ## Trazabilidad
 
