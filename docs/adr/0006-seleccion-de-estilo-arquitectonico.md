@@ -24,7 +24,7 @@ Se adopta el *Monolito Modular*, implementado físicamente a través de **5 mód
 ### Esqueleto de Módulos Base:
 ```text
 XALDAPP/
-├── app/             # Módulo orquestador: UI (Jetpack Compose), Navegación y Login
+├── app/             # Módulo orquestador: UI (vistas XML), Navegación y Login
 ├── parser/          # Módulo de dominio: Ingesta, lectura de SMS y expresiones regulares
 ├── corefinanciero/  # Módulo de dominio: Lógica financiera, entidades y base de datos local
 ├── syncqueue/       # Módulo de dominio: Encolamiento offline y sincronización (WorkManager)
@@ -52,4 +52,4 @@ XALDAPP/
 
 **Trazabilidad y Línea Base:**
 * **Versión:** Corte 1 (corte-1)
-* **Tag:** [corte-1](https://github.com/ISCOUTB/AS_202620_XALD/releases/tag/corte-1)
+* **Tag:** [corte-1](https://github.com/ISCOUTB/AS_202620_XALD/releases/tag/corte-1)    adr6
